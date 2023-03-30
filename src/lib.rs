@@ -5,6 +5,7 @@ use colors::Color;
 pub mod encode;
 pub mod ifd;
 pub mod colors;
+mod types;
 
 
 

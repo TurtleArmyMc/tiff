@@ -1,26 +1,26 @@
+mod buffer;
 mod ifd;
 mod image_header;
-use byteorder::WriteBytesExt;
 pub use image_header::EncodeEndianness;
 use itertools::Itertools;
 
 use crate::{
     colors,
     ifd::{
-        ifd::{IFDEntry, IfdFieldTag, IfdFieldValues, URational},
+        ifd::{IFDEntry, IfdFieldTag, IfdFieldValues},
         tags,
     },
+    types::{Short, URational},
     Image,
 };
 
-use self::{ifd::encode_ifds, image_header::encode_header};
+use self::{buffer::TiffEncodeBuffer, ifd::encode_ifds};
 
 pub fn encode<E>(image: &Image<colors::Bilevel>) -> Vec<u8>
 where
     E: EncodeEndianness,
 {
-    let mut encoded = Vec::new();
-    encode_header::<E>(&mut encoded);
+    let mut encoded = TiffEncodeBuffer::<E>::new();
 
     let byte_count = image.pixel_count() / 8 + if image.pixel_count() % 8 != 0 { 1 } else { 0 };
     for mut eight_pixels in &image.pixels().flatten().chunks(8) {
@@ -33,35 +33,31 @@ where
                     colors::Bilevel::White => 1,
                 }
         }
-        encoded.push(packed_pixels);
+        encoded.append_byte(packed_pixels);
     }
 
     // Update header to point to the correct IDF offset
-    if encoded.len() % 2 == 1 {
-        // Make sure that header offset is on a word boundry
-        encoded.push(0);
-    }
-    let offset = encoded.len() as u32;
-    (&mut encoded[4..8]).write_u32::<E>(offset).unwrap();
+    let ifd_inx = encoded.align_and_get_len().try_into().unwrap();
+    encoded.get_tiff_header().set_first_ifd_offset(ifd_inx);
 
     let mut entries: Vec<IFDEntry> = Vec::new();
 
     entries.push(IFDEntry::new(
         IfdFieldTag::ImageWidth,
-        IfdFieldValues::Shorts(Vec::from_iter([image.width() as u16])),
+        IfdFieldValues::Shorts(Vec::from_iter([image.width().try_into().unwrap()])),
     ));
     entries.push(IFDEntry::new(
         IfdFieldTag::ImageLength,
-        IfdFieldValues::Shorts(Vec::from_iter([image.height() as u16])),
+        IfdFieldValues::Shorts(Vec::from_iter([image.height().try_into().unwrap()])),
     ));
     entries.push(IFDEntry::new(
         IfdFieldTag::Compression,
-        IfdFieldValues::Shorts(Vec::from_iter([tags::Compression::NoCompression as u16])),
+        IfdFieldValues::Shorts(Vec::from_iter([tags::Compression::NoCompression as Short])),
     ));
     entries.push(IFDEntry::new(
         IfdFieldTag::PhotometricInterpretation,
         IfdFieldValues::Shorts(Vec::from_iter([
-            tags::PhotometricInterpretation::BlackIsZero as u16,
+            tags::PhotometricInterpretation::BlackIsZero as Short,
         ])),
     ));
 
@@ -95,5 +91,5 @@ where
 
     encode_ifds::<E>(&mut encoded, entries);
 
-    encoded
+    encoded.to_bytes()
 }

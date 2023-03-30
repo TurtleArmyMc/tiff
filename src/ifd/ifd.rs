@@ -1,3 +1,8 @@
+use crate::types::{Byte, Long, Short, URational};
+
+pub(crate) const ENTRY_COUNT_LEN: usize = 2;
+pub(crate) const NEXT_IFD_OFFSET_LEN: usize = 4;
+
 pub(crate) struct ImageFileDirectory {
     entries: Vec<IFDEntry>,
     next_directory_offset: Option<u32>,
@@ -11,12 +16,8 @@ impl ImageFileDirectory {
         }
     }
 
-    fn num_entries(&self) -> u16 {
-        self.entries.len().try_into().expect(&format!(
-            "ImageFileDirectory has {} more than {}",
-            self.entries.len(),
-            u16::MAX
-        ))
+    fn num_entries(&self) -> Short {
+        self.entries.len().try_into().unwrap()
     }
 }
 
@@ -66,34 +67,12 @@ pub(crate) enum IfdFieldType {
     // Double,
 }
 
-pub(crate) struct URational {
-    pub numerator: u32,
-    pub denominator: u32,
-}
-
-impl URational {
-    pub(crate) fn new(numerator: u32, denominator: u32) -> Self {
-        Self {
-            numerator,
-            denominator,
-        }
-    }
-
-    pub(crate) fn numerator(&self) -> u32 {
-        self.numerator
-    }
-
-    pub(crate) fn denominator(&self) -> u32 {
-        self.denominator
-    }
-}
-
 pub(crate) enum IfdFieldValues {
-    Bytes(Vec<u8>),
+    Bytes(Vec<Byte>),
     // According to the spec, only storing a single string is preferred when possible.
     ASCII(String),
-    Shorts(Vec<u16>),
-    Longs(Vec<u32>),
+    Shorts(Vec<Short>),
+    Longs(Vec<Long>),
     Rationals(Vec<URational>),
 }
 
