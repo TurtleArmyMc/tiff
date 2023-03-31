@@ -2,12 +2,10 @@ use std::slice::{ChunksExact, ChunksExactMut};
 
 use colors::Color;
 
+pub mod colors;
 pub mod encode;
 pub mod ifd;
-pub mod colors;
 mod types;
-
-
 
 pub struct Image<C: Color> {
     /// Pixels arranged left to right, then top to bottom
@@ -55,11 +53,9 @@ impl<C: Color> Image<C> {
     }
 
     fn pixel_count(&self) -> usize {
-        return self.width * self.height
+        self.width * self.height
     }
 }
-
-
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

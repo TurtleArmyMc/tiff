@@ -3,7 +3,7 @@ use std::{io::Write, iter::repeat, marker::PhantomData};
 use byteorder::WriteBytesExt;
 
 use crate::{
-    ifd::ifd::{self, IFDEntry, IfdFieldValues},
+    ifd,
     types::{Byte, Long, Short, URational},
 };
 
@@ -22,7 +22,7 @@ pub(crate) struct TiffHeaderEncodeBuffer<'a, E: EncodeEndianness>(
 pub(crate) struct IFDEncodeBuffer<'a, E: EncodeEndianness>(&'a mut [u8], PhantomData<E>);
 
 pub(crate) struct IFDEntryEncodeBuffer<'a, E: EncodeEndianness>(
-    &'a mut [u8; IFDEntry::LEN_BYTES],
+    &'a mut [u8; ifd::Entry::LEN],
     PhantomData<E>,
 );
 
@@ -56,8 +56,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
         // Write number of directory entries
         self.append_short(fields.try_into().unwrap());
         // Reserve space for directory fields
-        self.bytes
-            .extend(repeat(0).take(fields * IFDEntry::LEN_BYTES));
+        self.bytes.extend(repeat(0).take(fields * ifd::Entry::LEN));
         // Write next IFD offset
         self.bytes.extend([0, 0, 0, 0]);
 
@@ -65,16 +64,15 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
     }
 
     pub(crate) fn get_ifd_at(&mut self, inx: usize, fields: usize) -> IFDEncodeBuffer<'_, E> {
-        let end =
-            inx + ifd::ENTRY_COUNT_LEN + ifd::NEXT_IFD_OFFSET_LEN + fields * IFDEntry::LEN_BYTES;
+        let end = inx + ifd::get_len(fields);
         IFDEncodeBuffer(&mut self.bytes[inx..end], PhantomData)
     }
 
-    pub(crate) fn append_ifd_value(&mut self, ifd_value: &IfdFieldValues) -> [u8; 4] {
+    pub(crate) fn append_ifd_value(&mut self, ifd_value: &ifd::Values) -> [u8; 4] {
         let mut offset = [0, 0, 0, 0];
 
         match ifd_value {
-            IfdFieldValues::Bytes(bytes) => match bytes[..] {
+            ifd::Values::Bytes(bytes) => match bytes[..] {
                 [] | [_] | [_, _] | [_, _, _] | [_, _, _, _] => {
                     (&mut offset[..]).write(&bytes).unwrap();
                 }
@@ -85,7 +83,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
                     self.bytes.extend(bytes.iter());
                 }
             },
-            IfdFieldValues::ASCII(string) => {
+            ifd::Values::ASCII(string) => {
                 (&mut offset[..])
                     .write_u32::<E>(self.align_and_get_len().try_into().unwrap())
                     .unwrap();
@@ -93,7 +91,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
                 // Termainting NUL char
                 self.append_byte(0);
             }
-            IfdFieldValues::Shorts(shorts) => {
+            ifd::Values::Shorts(shorts) => {
                 match shorts[..] {
                     [] => (),
                     [short] => (&mut offset[..2]).write_u16::<E>(short).unwrap(),
@@ -111,7 +109,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
                     }
                 };
             }
-            IfdFieldValues::Longs(longs) => {
+            ifd::Values::Longs(longs) => {
                 match longs[..] {
                     [] => (),
                     [long] => (&mut offset[..]).write_u32::<E>(long).unwrap(),
@@ -125,7 +123,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
                     }
                 };
             }
-            IfdFieldValues::Rationals(rationals) => {
+            ifd::Values::Rationals(rationals) => {
                 (&mut offset[..])
                     .write_u32::<E>(self.align_and_get_len().try_into().unwrap())
                     .unwrap();
@@ -175,8 +173,8 @@ impl<'a, E: EncodeEndianness> TiffHeaderEncodeBuffer<'a, E> {
 
 impl<'a, E: EncodeEndianness> IFDEncodeBuffer<'a, E> {
     pub(crate) fn get_entry(&mut self, entry_num: usize) -> IFDEntryEncodeBuffer<'_, E> {
-        let start = ifd::ENTRY_COUNT_LEN + entry_num * IFDEntry::LEN_BYTES;
-        let end = start + IFDEntry::LEN_BYTES;
+        let start = ifd::ENTRY_COUNT_LEN + entry_num * ifd::Entry::LEN;
+        let end = start + ifd::Entry::LEN;
         IFDEntryEncodeBuffer((&mut self.0[start..end]).try_into().unwrap(), PhantomData)
     }
 
@@ -186,7 +184,7 @@ impl<'a, E: EncodeEndianness> IFDEncodeBuffer<'a, E> {
 }
 
 impl<'a, E: EncodeEndianness> IFDEntryEncodeBuffer<'a, E> {
-    pub(crate) fn set_all(&mut self, entry: &IFDEntry, value_offset: [u8; 4]) {
+    pub(crate) fn set_all(&mut self, entry: &ifd::Entry, value_offset: [u8; 4]) {
         // Write tag
         (&mut self.0[0..2])
             .write_u16::<E>(entry.tag() as u16)

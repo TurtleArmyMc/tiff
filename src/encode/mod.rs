@@ -1,20 +1,15 @@
 mod buffer;
-mod ifd;
 mod image_header;
 pub use image_header::EncodeEndianness;
 use itertools::Itertools;
 
 use crate::{
-    colors,
-    ifd::{
-        ifd::{IFDEntry, IfdFieldTag, IfdFieldValues},
-        tags,
-    },
-    types::{Short, URational},
+    colors, ifd,
+    types::{Long, Short, URational},
     Image,
 };
 
-use self::{buffer::TiffEncodeBuffer, ifd::encode_ifds};
+use self::buffer::TiffEncodeBuffer;
 
 pub fn encode<E>(image: &Image<colors::Bilevel>) -> Vec<u8>
 where
@@ -46,56 +41,97 @@ where
     let ifd_inx = encoded.align_and_get_len().try_into().unwrap();
     encoded.get_tiff_header().set_first_ifd_offset(ifd_inx);
 
-    let mut entries: Vec<IFDEntry> = Vec::new();
+    let mut entries: Vec<ifd::Entry> = Vec::new();
 
-    entries.push(IFDEntry::new(
-        IfdFieldTag::ImageWidth,
-        IfdFieldValues::Shorts(Vec::from_iter([image.width().try_into().unwrap()])),
+    entries.push(ifd::Entry::new(
+        ifd::Tag::ImageWidth,
+        ifd::Values::Longs(Vec::from_iter([image.width().try_into().unwrap()])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::ImageLength,
-        IfdFieldValues::Shorts(Vec::from_iter([image.height().try_into().unwrap()])),
+    entries.push(ifd::Entry::new(
+        ifd::Tag::ImageLength,
+        ifd::Values::Longs(Vec::from_iter([image.height().try_into().unwrap()])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::Compression,
-        IfdFieldValues::Shorts(Vec::from_iter([tags::Compression::NoCompression as Short])),
+    entries.push(ifd::Entry::new(
+        ifd::Tag::Compression,
+        ifd::Values::Shorts(Vec::from_iter([
+            ifd::tags::Compression::NoCompression as Short
+        ])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::PhotometricInterpretation,
-        IfdFieldValues::Shorts(Vec::from_iter([
-            tags::PhotometricInterpretation::BlackIsZero as Short,
+    entries.push(ifd::Entry::new(
+        ifd::Tag::PhotometricInterpretation,
+        ifd::Values::Shorts(Vec::from_iter([
+            ifd::tags::PhotometricInterpretation::BlackIsZero as Short,
         ])),
     ));
 
-    entries.push(IFDEntry::new(
-        IfdFieldTag::StripOffsets,
+    entries.push(ifd::Entry::new(
+        ifd::Tag::StripOffsets,
         // The only strip starts immediately after the header
-        IfdFieldValues::Shorts(Vec::from_iter([8])),
+        ifd::Values::Shorts(Vec::from_iter([8])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::RowsPerStrip,
-        IfdFieldValues::Shorts(Vec::from_iter([image
+    entries.push(ifd::Entry::new(
+        ifd::Tag::RowsPerStrip,
+        ifd::Values::Shorts(Vec::from_iter([image
             .height()
             .try_into()
             .expect("too many rows in image")])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::StripByteCounts,
-        IfdFieldValues::Shorts(Vec::from_iter([byte_count
+    entries.push(ifd::Entry::new(
+        ifd::Tag::StripByteCounts,
+        ifd::Values::Shorts(Vec::from_iter([byte_count
             .try_into()
             .expect("too many pixels in the image")])),
     ));
 
-    entries.push(IFDEntry::new(
-        IfdFieldTag::XResolution,
-        IfdFieldValues::Rationals(Vec::from_iter([URational::new(1, 1)])),
+    entries.push(ifd::Entry::new(
+        ifd::Tag::XResolution,
+        ifd::Values::Rationals(Vec::from_iter([URational::new(1, 1)])),
     ));
-    entries.push(IFDEntry::new(
-        IfdFieldTag::YResolution,
-        IfdFieldValues::Rationals(Vec::from_iter([URational::new(1, 1)])),
+    entries.push(ifd::Entry::new(
+        ifd::Tag::YResolution,
+        ifd::Values::Rationals(Vec::from_iter([URational::new(1, 1)])),
     ));
 
     encode_ifds::<E>(&mut encoded, entries);
 
     encoded.to_bytes()
+}
+
+/// Encodes headers and ifd::values for entries
+pub(crate) fn encode_ifds<E: EncodeEndianness>(
+    wrt: &mut TiffEncodeBuffer<E>,
+    mut ifds: Vec<ifd::Entry>,
+) {
+    ifds.sort_unstable_by_key(|ifd| ifd.tag());
+
+    let ifd_inx = wrt.append_new_ifd(ifds.len());
+
+    for (entry_num, entry) in ifds.iter().enumerate() {
+        let value_offset = wrt.append_ifd_value(entry.values());
+        wrt.get_ifd_at(ifd_inx, ifds.len())
+            .get_entry(entry_num)
+            .set_all(entry, value_offset);
+    }
+}
+
+impl ifd::Values {
+    pub(crate) const fn field_type_tag(&self) -> ifd::Type {
+        match self {
+            ifd::Values::Bytes(_) => ifd::Type::Byte,
+            ifd::Values::ASCII(_) => ifd::Type::ASCII,
+            ifd::Values::Shorts(_) => ifd::Type::Short,
+            ifd::Values::Longs(_) => ifd::Type::Long,
+            ifd::Values::Rationals(_) => ifd::Type::Rational,
+        }
+    }
+
+    pub(crate) fn num_values(&self) -> Long {
+        match self {
+            ifd::Values::Bytes(bytes) => bytes.len().try_into().unwrap(),
+            ifd::Values::ASCII(_) => 1,
+            ifd::Values::Shorts(short) => short.len().try_into().unwrap(),
+            ifd::Values::Longs(long) => long.len().try_into().unwrap(),
+            ifd::Values::Rationals(rational) => rational.len().try_into().unwrap(),
+        }
+    }
 }
