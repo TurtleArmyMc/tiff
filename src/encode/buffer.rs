@@ -52,8 +52,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
     }
 
     pub(crate) fn append_new_ifd(&mut self, fields: usize) -> usize {
-        self.ensure_aligned();
-        let inx = self.len();
+        let inx = self.align_and_get_len();
         // Write number of directory entries
         self.append_short(fields.try_into().unwrap());
         // Reserve space for directory fields
@@ -139,36 +138,16 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
         offset
     }
 
-    pub(crate) fn append_byte_aligned(&mut self, byte: Byte) {
-        self.ensure_aligned();
-        self.append_byte(byte)
-    }
-
     pub(crate) fn append_byte(&mut self, byte: Byte) {
         self.bytes.push(byte)
-    }
-
-    pub(crate) fn append_short_aligned(&mut self, short: Short) {
-        self.ensure_aligned();
-        self.append_short(short)
     }
 
     pub(crate) fn append_short(&mut self, short: Short) {
         self.bytes.write_u16::<E>(short).unwrap()
     }
 
-    pub(crate) fn append_long_aligned(&mut self, long: Long) {
-        self.ensure_aligned();
-        self.append_long(long)
-    }
-
     pub(crate) fn append_long(&mut self, long: Long) {
         self.bytes.write_u32::<E>(long).unwrap()
-    }
-
-    pub(crate) fn append_urational_aligned(&mut self, urational: URational) {
-        self.ensure_aligned();
-        self.append_urational(urational)
     }
 
     pub(crate) fn append_urational(&mut self, urational: URational) {
@@ -181,18 +160,10 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
     }
 
     pub(crate) fn align_and_get_len(&mut self) -> usize {
-        self.ensure_aligned();
-        self.len()
-    }
-
-    pub(crate) fn is_aligned(&self) -> bool {
-        self.bytes.len() % 2 == 0
-    }
-
-    fn ensure_aligned(&mut self) {
-        if !self.is_aligned() {
+        if self.bytes.len() % 2 == 1 {
             self.append_byte(0)
         }
+        self.len()
     }
 }
 
