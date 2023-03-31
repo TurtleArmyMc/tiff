@@ -22,18 +22,24 @@ where
 {
     let mut encoded = TiffEncodeBuffer::<E>::new();
 
-    let byte_count = image.pixel_count() / 8 + if image.pixel_count() % 8 != 0 { 1 } else { 0 };
-    for mut eight_pixels in &image.pixels().flatten().chunks(8) {
-        let mut packed_pixels = 0;
-        for _ in 0..8 {
-            let pixel = eight_pixels.next().unwrap_or(&colors::Bilevel::Black);
-            packed_pixels = (packed_pixels << 1)
-                | match pixel {
-                    colors::Bilevel::Black => 0,
-                    colors::Bilevel::White => 1,
-                }
+    let row_byte_count = image.width() / 8 + (image.width() % 8).min(1);
+    let byte_count = row_byte_count * image.height();
+
+    for row in image.pixels() {
+        for mut eight_pixels in &row.iter().chunks(8) {
+            let mut packed_pixels = 0;
+            for bit in (0..8).rev() {
+                packed_pixels |= eight_pixels
+                    .next()
+                    .map(|pixel| match pixel {
+                        colors::Bilevel::Black => 0,
+                        colors::Bilevel::White => 1,
+                    })
+                    .unwrap_or(0)
+                    << bit;
+            }
+            encoded.append_byte(packed_pixels);
         }
-        encoded.append_byte(packed_pixels);
     }
 
     // Update header to point to the correct IDF offset
