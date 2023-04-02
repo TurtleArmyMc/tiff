@@ -9,7 +9,7 @@ use crate::{
 
 use super::{image_header, EncodeEndianness};
 
-pub(crate) struct TiffEncodeBuffer<E: EncodeEndianness> {
+pub struct TiffEncodeBuffer<E: EncodeEndianness> {
     bytes: Vec<u8>,
     phantom: PhantomData<E>,
 }
@@ -94,7 +94,7 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
             ifd::Values::Shorts(shorts) => {
                 match shorts[..] {
                     [] => (),
-                    [short] => (&mut offset[..2]).write_u16::<E>(short).unwrap(),
+                    [short] => (&mut offset[0..2]).write_u16::<E>(short).unwrap(),
                     [short1, short2] => {
                         (&mut offset[0..2]).write_u16::<E>(short1).unwrap();
                         (&mut offset[2..4]).write_u16::<E>(short2).unwrap();
