@@ -1,4 +1,4 @@
-use std::{io::Write, iter::repeat, marker::PhantomData};
+use std::{io::Write, iter::repeat, marker::PhantomData, mem::size_of};
 
 use byteorder::WriteBytesExt;
 
@@ -179,7 +179,8 @@ impl<'a, E: EncodeEndianness> IFDEncodeBuffer<'a, E> {
     }
 
     pub(crate) fn set_next_ifd_offset(&mut self, offset: Long) {
-        (&mut self.0).write_u32::<E>(offset).unwrap()
+        let buff_inx = self.0.len() - size_of::<Long>();
+        (&mut self.0[buff_inx..]).write_u32::<E>(offset).unwrap()
     }
 }
 

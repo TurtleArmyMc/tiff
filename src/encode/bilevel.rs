@@ -9,8 +9,10 @@ use crate::{
 };
 
 use super::{
-    buffer::TiffEncodeBuffer, compression::Compression, private::EncoderImpl, EncodeEndianness,
-    Encoder,
+    buffer::TiffEncodeBuffer,
+    compression::Compression,
+    private::{EncoderImpl, IfdInfo},
+    EncodeEndianness, Encoder,
 };
 
 pub trait PhotometricInterpretation: private::PhotometricInterpretationImpl {}
@@ -56,7 +58,7 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Enco
 {
     type Endianness = E;
 
-    fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> usize {
+    fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> IfdInfo {
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
@@ -104,6 +106,7 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Enco
                 ifd::Values::Rationals(vec![URational::new(1, 1)]),
             ),
         ];
+        let entry_count = ifd_entries.len();
 
         debug_assert!(
             ifd_entries
@@ -115,7 +118,10 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Enco
 
         encode_ifds(wrt, ifd_entries.into_iter());
 
-        ifd_inx
+        IfdInfo {
+            inx: ifd_inx,
+            entry_count,
+        }
     }
 }
 

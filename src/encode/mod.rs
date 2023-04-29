@@ -10,11 +10,45 @@ use crate::{ifd, types::Long};
 
 use self::buffer::TiffEncodeBuffer;
 
+/// Encodes multiple images into a single file.
+///
+/// # Panics
+/// Panics if the iterator has no elements.
+pub fn encode<'a, Endianness, E, I>(mut images: I) -> Vec<u8>
+where
+    Endianness: EncodeEndianness + 'static,
+    E: Encoder<Endianness = Endianness> + ?Sized + 'a,
+    I: Iterator<Item = &'a E>,
+{
+    let mut encoded = TiffEncodeBuffer::<Endianness>::new();
+
+    let mut prev_ifd_info = match images.next() {
+        Some(first) => {
+            let ifd_info = first.append_to_buffer(&mut encoded);
+            // Update header to point to the correct IDF offset
+            encoded
+                .get_tiff_header()
+                .set_first_ifd_offset(ifd_info.inx.try_into().unwrap());
+            ifd_info
+        }
+        None => panic!("tiff file must have at least one image"),
+    };
+    for image in images {
+        let ifd_info = image.append_to_buffer(&mut encoded);
+        encoded
+            .get_ifd_at(prev_ifd_info.inx, prev_ifd_info.entry_count)
+            .set_next_ifd_offset(ifd_info.inx.try_into().unwrap());
+        prev_ifd_info = ifd_info;
+    }
+
+    encoded.to_bytes()
+}
+
 pub trait Encoder: private::EncoderImpl {
     fn encode(&self) -> Vec<u8> {
         let mut encoded = TiffEncodeBuffer::<Self::Endianness>::new();
 
-        let ifd_inx = self.append_to_buffer(&mut encoded).try_into().unwrap();
+        let ifd_inx = self.append_to_buffer(&mut encoded).inx.try_into().unwrap();
         // Update header to point to the correct IDF offset
         encoded.get_tiff_header().set_first_ifd_offset(ifd_inx);
 
@@ -65,6 +99,11 @@ pub(crate) mod private {
 
     use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
 
+    pub struct IfdInfo {
+        pub(crate) inx: usize,
+        pub(crate) entry_count: usize,
+    }
+
     pub struct EncodeResult {
         pub(crate) image_strip_offsets: Vec<Short>,
         pub(crate) image_strip_bytecounts: Vec<Short>,
@@ -73,6 +112,6 @@ pub(crate) mod private {
     pub trait EncoderImpl {
         type Endianness: EncodeEndianness;
 
-        fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<Self::Endianness>) -> usize;
+        fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<Self::Endianness>) -> IfdInfo;
     }
 }
