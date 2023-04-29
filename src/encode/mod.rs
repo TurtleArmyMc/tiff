@@ -10,12 +10,9 @@ use crate::{ifd, types::Long};
 
 use self::buffer::TiffEncodeBuffer;
 
-pub trait Encoder: private::EncoderImpl + Sized {
-    fn encode<E>(self) -> Vec<u8>
-    where
-        E: EncodeEndianness,
-    {
-        let mut encoded = TiffEncodeBuffer::<E>::new();
+pub trait Encoder: private::EncoderImpl {
+    fn encode(&self) -> Vec<u8> {
+        let mut encoded = TiffEncodeBuffer::<Self::Endianness>::new();
 
         let ifd_inx = self.append_to_buffer(&mut encoded).try_into().unwrap();
         // Update header to point to the correct IDF offset
@@ -74,6 +71,8 @@ pub(crate) mod private {
     }
 
     pub trait EncoderImpl {
-        fn append_to_buffer<E: EncodeEndianness>(self, wrt: &mut TiffEncodeBuffer<E>) -> usize;
+        type Endianness: EncodeEndianness;
+
+        fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<Self::Endianness>) -> usize;
     }
 }

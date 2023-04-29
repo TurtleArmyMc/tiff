@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{
     colors,
     encode::{encode_ifds, private::EncodeResult},
@@ -20,7 +22,7 @@ pub struct WhiteIsZero;
 impl PhotometricInterpretation for BlackIsZero {}
 impl PhotometricInterpretation for WhiteIsZero {}
 
-pub struct BilevelImageEncoder<'a, C, P = BlackIsZero>
+pub struct BilevelImageEncoder<'a, E, C, P = BlackIsZero>
 where
     C: Compression,
     P: PhotometricInterpretation,
@@ -28,32 +30,39 @@ where
     image: &'a Image<colors::Bilevel>,
     image_compressor: C,
     photo_interp: P,
+    endianness: PhantomData<E>,
 }
 
-impl<'a, C: Compression, P: PhotometricInterpretation> BilevelImageEncoder<'a, C, P> {
+impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
+    BilevelImageEncoder<'a, E, C, P>
+{
     pub fn new(image: &'a Image<colors::Bilevel>, compression: C, photo_interp: P) -> Self {
         Self {
             image,
             image_compressor: compression,
             photo_interp,
+            endianness: PhantomData,
         }
     }
 }
 
-impl<'a, C: Compression, P: PhotometricInterpretation> Encoder for BilevelImageEncoder<'a, C, P> {}
-
-impl<'a, C: Compression, P: PhotometricInterpretation> EncoderImpl
-    for BilevelImageEncoder<'a, C, P>
+impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Encoder
+    for BilevelImageEncoder<'a, E, C, P>
 {
-    fn append_to_buffer<E: EncodeEndianness>(self, wrt: &mut TiffEncodeBuffer<E>) -> usize {
+}
+
+impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> EncoderImpl
+    for BilevelImageEncoder<'a, E, C, P>
+{
+    type Endianness = E;
+
+    fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> usize {
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
-        } = self.image_compressor.encode_bilevel_img(
-            wrt,
-            self.image.pixels(),
-            self.photo_interp,
-        );
+        } = self
+            .image_compressor
+            .encode_bilevel_img(wrt, self.image.pixels(), self.photo_interp);
 
         let ifd_inx = wrt.align_and_get_len();
 
