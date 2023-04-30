@@ -11,8 +11,8 @@ use crate::{
 use super::{
     buffer::TiffEncodeBuffer,
     compression::Compression,
-    private::{EncoderImpl, IfdInfo},
-    EncodeEndianness, Encoder,
+    private::{IfdInfo, ImageEncoderImpl},
+    EncodeEndianness, ImageEncoder,
 };
 
 pub trait PhotometricInterpretation: private::PhotometricInterpretationImpl {}
@@ -48,17 +48,17 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
     }
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Encoder
+impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoder
     for BilevelImageEncoder<'a, E, C, P>
 {
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> EncoderImpl
+impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoderImpl
     for BilevelImageEncoder<'a, E, C, P>
 {
     type Endianness = E;
 
-    fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> IfdInfo {
+    fn append_image_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> IfdInfo {
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
@@ -68,7 +68,7 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Enco
 
         let ifd_inx = wrt.align_and_get_len();
 
-        let ifd_entries = vec![
+        let ifd_entries = [
             ifd::Entry::new(
                 ifd::Tag::ImageWidth,
                 ifd::Values::Longs(vec![self.image.width().try_into().unwrap()]),

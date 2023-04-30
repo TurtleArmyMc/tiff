@@ -14,18 +14,17 @@ use self::buffer::TiffEncodeBuffer;
 ///
 /// # Panics
 /// Panics if the iterator has no elements.
-pub fn encode<'a, Endianness, E, I>(mut images: I) -> Vec<u8>
+pub fn encode_images<'a, Endianness, E, I>(mut images: I) -> Vec<u8>
 where
     Endianness: EncodeEndianness + 'static,
-    E: Encoder<Endianness = Endianness> + ?Sized + 'a,
+    E: ImageEncoder<Endianness = Endianness> + ?Sized + 'a,
     I: Iterator<Item = &'a E>,
 {
     let mut encoded = TiffEncodeBuffer::<Endianness>::new();
 
     let mut prev_ifd_info = match images.next() {
         Some(first) => {
-            let ifd_info = first.append_to_buffer(&mut encoded);
-            // Update header to point to the correct IDF offset
+            let ifd_info = first.append_image_to_buffer(&mut encoded);
             encoded
                 .get_tiff_header()
                 .set_first_ifd_offset(ifd_info.inx.try_into().unwrap());
@@ -34,7 +33,7 @@ where
         None => panic!("tiff file must have at least one image"),
     };
     for image in images {
-        let ifd_info = image.append_to_buffer(&mut encoded);
+        let ifd_info = image.append_image_to_buffer(&mut encoded);
         encoded
             .get_ifd_at(prev_ifd_info.inx, prev_ifd_info.entry_count)
             .set_next_ifd_offset(ifd_info.inx.try_into().unwrap());
@@ -44,11 +43,16 @@ where
     encoded.to_bytes()
 }
 
-pub trait Encoder: private::EncoderImpl {
+pub trait ImageEncoder: private::ImageEncoderImpl {
+    /// Encodes image into a file with that single image.
     fn encode(&self) -> Vec<u8> {
         let mut encoded = TiffEncodeBuffer::<Self::Endianness>::new();
 
-        let ifd_inx = self.append_to_buffer(&mut encoded).inx.try_into().unwrap();
+        let ifd_inx = self
+            .append_image_to_buffer(&mut encoded)
+            .inx
+            .try_into()
+            .unwrap();
         // Update header to point to the correct IDF offset
         encoded.get_tiff_header().set_first_ifd_offset(ifd_inx);
 
@@ -109,9 +113,11 @@ pub(crate) mod private {
         pub(crate) image_strip_bytecounts: Vec<Short>,
     }
 
-    pub trait EncoderImpl {
+    pub trait ImageEncoderImpl {
         type Endianness: EncodeEndianness;
 
-        fn append_to_buffer(&self, wrt: &mut TiffEncodeBuffer<Self::Endianness>) -> IfdInfo;
+        /// Appends an image to a buffer and returns the index and number of entries in its image field directory.
+        /// This may or may not be the only image in the file.
+        fn append_image_to_buffer(&self, wrt: &mut TiffEncodeBuffer<Self::Endianness>) -> IfdInfo;
     }
 }
