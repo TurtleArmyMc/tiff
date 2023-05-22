@@ -29,21 +29,21 @@ pub trait Compression: private::ImageWriter {}
 pub struct NoCompression;
 impl Compression for NoCompression {}
 
-pub struct BilevelImageEncoder<'a, E, C, P = BlackIsZero>
+pub struct Grayscale8BitImageEncoder<'a, E, C, P = BlackIsZero>
 where
     C: Compression,
     P: PhotometricInterpretation,
 {
-    image: &'a Image<colors::Bilevel>,
+    image: &'a Image<colors::Grayscale8Bit>,
     image_compressor: C,
     photo_interp: P,
     endianness: PhantomData<E>,
 }
 
 impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
-    BilevelImageEncoder<'a, E, C, P>
+    Grayscale8BitImageEncoder<'a, E, C, P>
 {
-    pub fn new(image: &'a Image<colors::Bilevel>, compression: C, photo_interp: P) -> Self {
+    pub fn new(image: &'a Image<colors::Grayscale8Bit>, compression: C, photo_interp: P) -> Self {
         Self {
             image,
             image_compressor: compression,
@@ -54,12 +54,12 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
 }
 
 impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoder
-    for BilevelImageEncoder<'a, E, C, P>
+    for Grayscale8BitImageEncoder<'a, E, C, P>
 {
 }
 
 impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoderImpl
-    for BilevelImageEncoder<'a, E, C, P>
+    for Grayscale8BitImageEncoder<'a, E, C, P>
 {
     type Endianness = E;
 
@@ -69,7 +69,7 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
             image_strip_bytecounts,
         } = self
             .image_compressor
-            .encode_bilevel_img(wrt, self.image.pixels(), self.photo_interp);
+            .encode_grayscale_img(wrt, self.image.pixels(), self.photo_interp);
 
         let ifd_inx = wrt.align_and_get_len();
 
@@ -82,6 +82,7 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
                 ifd::Tag::ImageLength,
                 ifd::Values::Longs(vec![self.image.height().try_into().unwrap()]),
             ),
+            ifd::Entry::new(ifd::Tag::BitsPerSample, ifd::Values::Shorts(vec![8])),
             ifd::Entry::new(
                 ifd::Tag::Compression,
                 ifd::Values::Shorts(vec![self.image_compressor.compression_type_tag() as Short]),
@@ -135,23 +136,21 @@ pub(crate) mod private {
     use crate::encode::private::EncodeResult;
     use crate::{
         colors,
-        encode::{bilevel::PhotometricInterpretation, buffer::TiffEncodeBuffer, EncodeEndianness},
+        encode::{
+            buffer::TiffEncodeBuffer, grayscale_8bit::PhotometricInterpretation, EncodeEndianness,
+        },
         ifd,
     };
-    use itertools::Itertools;
     use std::slice::ChunksExact;
 
     pub trait PhotometricInterpretationImpl: Copy {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8;
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8;
         fn tag(&self) -> ifd::tags::PhotometricInterpretation;
     }
 
     impl PhotometricInterpretationImpl for BlackIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8 {
-            match pixel {
-                colors::Bilevel::Black => 0,
-                colors::Bilevel::White => 1,
-            }
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8 {
+            pixel.0
         }
 
         fn tag(&self) -> ifd::tags::PhotometricInterpretation {
@@ -160,11 +159,8 @@ pub(crate) mod private {
     }
 
     impl PhotometricInterpretationImpl for WhiteIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8 {
-            match pixel {
-                colors::Bilevel::Black => 1,
-                colors::Bilevel::White => 0,
-            }
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8 {
+            0xFF - pixel.0
         }
 
         fn tag(&self) -> ifd::tags::PhotometricInterpretation {
@@ -175,10 +171,10 @@ pub(crate) mod private {
     pub trait ImageWriter: Copy {
         fn compression_type_tag(&self) -> ifd::tags::Compression;
 
-        fn encode_bilevel_img<E: EncodeEndianness, P: PhotometricInterpretation>(
+        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
             &self,
             wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::Bilevel>,
+            pixels: ChunksExact<'_, colors::Grayscale8Bit>,
             photo_iterp: P,
         ) -> EncodeResult;
     }
@@ -188,25 +184,19 @@ pub(crate) mod private {
             ifd::tags::Compression::NoCompression
         }
 
-        fn encode_bilevel_img<E: EncodeEndianness, P: PhotometricInterpretation>(
+        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
             &self,
             wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::Bilevel>,
+            pixels: ChunksExact<'_, colors::Grayscale8Bit>,
             photo_iterp: P,
         ) -> EncodeResult {
             let row_inx = wrt.align_and_get_len().try_into().unwrap();
             let mut byte_count = 0;
 
-            for row in pixels {
-                for eight_pixels in &row.iter().chunks(8) {
-                    let mut packed_pixels = 0;
-                    for (bit, pixel) in (0..8).rev().zip(eight_pixels) {
-                        packed_pixels |= photo_iterp.encode_pixel(*pixel) << bit;
-                    }
-                    byte_count += 1;
-                    wrt.append_byte(packed_pixels);
-                }
-            }
+            wrt.extend_bytes(pixels.flatten().map(|pixel| {
+                byte_count += 1;
+                photo_iterp.encode_pixel(*pixel)
+            }));
 
             EncodeResult {
                 image_strip_offsets: vec![row_inx],

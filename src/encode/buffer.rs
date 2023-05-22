@@ -153,6 +153,10 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
         self.bytes.write_u32::<E>(urational.denominator).unwrap()
     }
 
+    pub(crate) fn extend_bytes<I: Iterator<Item = Byte>>(&mut self, iter: I) {
+        self.bytes.extend(iter)
+    }
+
     pub(crate) fn len(&self) -> usize {
         self.bytes.len()
     }

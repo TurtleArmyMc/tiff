@@ -1,6 +1,6 @@
 pub mod bilevel;
 mod buffer;
-pub mod compression;
+pub mod grayscale_8bit;
 mod image_header;
 
 pub use bilevel::BilevelImageEncoder;
