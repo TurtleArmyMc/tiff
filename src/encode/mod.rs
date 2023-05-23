@@ -1,5 +1,6 @@
 pub mod bilevel;
 mod buffer;
+pub mod grayscale_4bit;
 pub mod grayscale_8bit;
 mod image_header;
 
