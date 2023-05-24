@@ -91,7 +91,7 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
             ),
             ifd::Entry::new(
                 ifd::Tag::StripByteCounts,
-                ifd::Values::Shorts(image_strip_bytecounts),
+                ifd::Values::Longs(image_strip_bytecounts),
             ),
             ifd::Entry::new(
                 ifd::Tag::XResolution,

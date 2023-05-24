@@ -101,7 +101,7 @@ impl ifd::Values {
 }
 
 pub(crate) mod private {
-    use crate::types::Short;
+    use crate::types::{Long, Short};
 
     use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
 
@@ -112,7 +112,7 @@ pub(crate) mod private {
 
     pub struct EncodeResult {
         pub(crate) image_strip_offsets: Vec<Short>,
-        pub(crate) image_strip_bytecounts: Vec<Short>,
+        pub(crate) image_strip_bytecounts: Vec<Long>,
     }
 
     pub trait ImageEncoderImpl {
