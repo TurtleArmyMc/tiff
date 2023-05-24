@@ -190,17 +190,17 @@ pub(crate) mod private {
             pixels: ChunksExact<'_, colors::Grayscale8Bit>,
             photo_iterp: P,
         ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len().try_into().unwrap();
-            let mut byte_count = 0;
+            let row_inx = wrt.align_and_get_len();
 
-            wrt.extend_bytes(pixels.flatten().map(|pixel| {
-                byte_count += 1;
-                photo_iterp.encode_pixel(*pixel)
-            }));
+            wrt.extend_bytes(
+                pixels
+                    .flatten()
+                    .map(|pixel| photo_iterp.encode_pixel(*pixel)),
+            );
 
             EncodeResult {
-                image_strip_offsets: vec![row_inx],
-                image_strip_bytecounts: vec![byte_count],
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
             }
         }
     }

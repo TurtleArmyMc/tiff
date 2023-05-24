@@ -1,7 +1,4 @@
-use std::{
-    collections::{hash_map, HashMap},
-    iter::repeat,
-};
+use std::iter::repeat;
 
 use crate::{types::Short, Image};
 
@@ -57,29 +54,64 @@ impl RGB {
 #[derive(Clone)]
 pub struct ColorMap {
     to_rgb: Vec<RGB>,
-    to_inx: HashMap<RGB, u8>,
 }
 impl ColorMap {
     pub fn new() -> Self {
-        Self {
-            to_rgb: Vec::new(),
-            to_inx: HashMap::new(),
-        }
+        Self { to_rgb: Vec::new() }
     }
 
-    /// Returns the palettized pixels.
+    /// Returns a palettized image with the given pixels.
     ///
     /// # Panics
     ///
     /// Panics if there are too many colors to palettize (more than 256).
-    pub fn palettize_pixels<'a>(&'a mut self, pixels: &[RGB]) -> Vec<PaletteColor<'a>> {
+    pub fn new_palettized_image(
+        &mut self,
+        pixels: &[RGB],
+        width: usize,
+        height: usize,
+    ) -> Image<PaletteColor<'_>> {
+        let palettized_pixels = self
+            .try_palettize_pixels(pixels)
+            .expect("too many colors for palette in pixels");
+        Image::new(palettized_pixels, width, height)
+    }
+
+    pub fn try_new_palettized_image(
+        &mut self,
+        pixels: &[RGB],
+        width: usize,
+        height: usize,
+    ) -> Option<Image<PaletteColor<'_>>> {
         self.try_palettize_pixels(pixels)
-            .expect("too many colors for palette in pixels")
+            .map(|palettized_pixels| Image::new(palettized_pixels, width, height))
+    }
+
+    pub(crate) fn bits_per_palette_sample(&self) -> Short {
+        if self.to_rgb.len() <= 16 {
+            4
+        } else {
+            8
+        }
+    }
+
+    pub(crate) fn create_colormap_vec(&self) -> Vec<Short> {
+        let remaining = 2usize.pow(self.bits_per_palette_sample() as u32) - self.to_rgb.len();
+        let colors = self
+            .to_rgb
+            .iter()
+            .copied()
+            .chain(repeat(RGB::new(0, 0, 0)).take(remaining));
+        colors
+            .clone()
+            .map(|color| color.r as Short)
+            .chain(colors.clone().map(|color| color.g as Short))
+            .chain(colors.clone().map(|color| color.b as Short))
+            .collect()
     }
 
     /// Returns the palettized pixels, or None if there are too many colors to palettize (more than 256).
-    /// If palettization fails, the map will be filled with 256 colors.
-    pub fn try_palettize_pixels<'a>(&'a mut self, pixels: &[RGB]) -> Option<Vec<PaletteColor<'a>>> {
+    fn try_palettize_pixels<'a>(&'a mut self, pixels: &[RGB]) -> Option<Vec<PaletteColor<'a>>> {
         for pixel in pixels {
             if self.get_or_create_inx(*pixel) == None {
                 return None;
@@ -94,46 +126,32 @@ impl ColorMap {
         )
     }
 
-    pub(crate) fn can_be_4bit(&self) -> bool {
-        self.to_rgb.len() <= 16
-    }
-
-    pub(crate) fn create_colormap_vec(&self) -> Vec<Short> {
-        let colors = self
-            .to_rgb
-            .iter()
-            .copied()
-            .chain(repeat(RGB::new(0, 0, 0)).take(256 - self.to_rgb.len()));
-        colors
-            .clone()
-            .map(|color| color.r as Short)
-            .chain(colors.clone().map(|color| color.g as Short))
-            .chain(colors.clone().map(|color| color.b as Short))
-            .collect()
-    }
-
     fn get_inx(&self, c: RGB) -> Option<u8> {
-        self.to_inx.get(&c).map(|inx| *inx as u8)
+        self.to_rgb
+            .iter()
+            .enumerate()
+            .find(|(_, &pixel)| c == pixel)
+            .map(|(inx, _)| inx as u8)
     }
 
     fn get_or_create_inx(&mut self, c: RGB) -> Option<u8> {
-        match self.to_inx.entry(c) {
-            hash_map::Entry::Occupied(e) => Some(*e.get()),
-            hash_map::Entry::Vacant(e) => {
+        match self.get_inx(c) {
+            None => {
                 if self.to_rgb.len() >= 256 {
                     None
                 } else {
                     self.to_rgb.push(c);
-                    Some(*e.insert((self.to_rgb.len() - 1) as u8))
+                    Some((self.to_rgb.len() - 1) as u8)
                 }
             }
+            inx => inx,
         }
     }
 }
 
 impl<'a> Image<PaletteColor<'a>> {
-    pub fn can_be_4bit(&self) -> bool {
-        self.pixels.first().unwrap().can_be_4bit()
+    pub fn bits_per_palette_sample(&self) -> Short {
+        self.pixels.first().unwrap().bits_per_palette_sample()
     }
 
     pub(crate) fn get_colormap(&self) -> &ColorMap {
@@ -141,6 +159,8 @@ impl<'a> Image<PaletteColor<'a>> {
     }
 }
 
+/// A color referencing a [`ColorMap`].
+/// A [`Image<PaletteColor>`] can be created using [`ColorMap::new_palettized_image()`] or [`ColorMap::try_new_palettized_image()`].
 #[derive(Clone, Copy)]
 pub struct PaletteColor<'a> {
     map: &'a ColorMap,
@@ -156,7 +176,7 @@ impl<'a> PaletteColor<'a> {
         self.inx
     }
 
-    pub(crate) fn can_be_4bit(&self) -> bool {
-        self.map.can_be_4bit()
+    pub(crate) fn bits_per_palette_sample(&self) -> Short {
+        self.map.bits_per_palette_sample()
     }
 }

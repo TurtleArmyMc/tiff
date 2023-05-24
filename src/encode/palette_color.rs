@@ -50,9 +50,11 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
-        } = self
-            .image_compressor
-            .encode_palettized_img(wrt, self.image.pixels());
+        } = self.image_compressor.encode_palettized_img(
+            wrt,
+            self.image.pixels(),
+            self.image.bits_per_palette_sample() as u8,
+        );
 
         let ifd_inx = wrt.align_and_get_len();
 
@@ -65,8 +67,10 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
                 ifd::Tag::ImageLength,
                 ifd::Values::Longs(vec![self.image.height().try_into().unwrap()]),
             ),
-            // TODO: Automatically switch to 4bit when possible
-            ifd::Entry::new(ifd::Tag::BitsPerSample, ifd::Values::Shorts(vec![8])),
+            ifd::Entry::new(
+                ifd::Tag::BitsPerSample,
+                ifd::Values::Shorts(vec![self.image.bits_per_palette_sample()]),
+            ),
             ifd::Entry::new(
                 ifd::Tag::Compression,
                 ifd::Values::Shorts(vec![self.image_compressor.compression_type_tag() as Short]),
@@ -123,6 +127,7 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
 
 pub(crate) mod private {
     use super::NoCompression;
+    use crate::colors::PaletteColor;
     use crate::encode::private::EncodeResult;
     use crate::{
         colors,
@@ -138,6 +143,7 @@ pub(crate) mod private {
             &self,
             wrt: &mut TiffEncodeBuffer<E>,
             pixels: ChunksExact<'_, colors::PaletteColor>,
+            bits_per_sample: u8,
         ) -> EncodeResult;
     }
 
@@ -150,18 +156,22 @@ pub(crate) mod private {
             &self,
             wrt: &mut TiffEncodeBuffer<E>,
             pixels: ChunksExact<'_, colors::PaletteColor>,
+            bits_per_sample: u8,
         ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len().try_into().unwrap();
-            let mut byte_count = 0;
+            let row_inx = wrt.align_and_get_len();
 
-            wrt.extend_bytes(pixels.flatten().map(|pixel| {
-                byte_count += 1;
-                pixel.get_inx()
-            }));
+            if bits_per_sample == 8 {
+                wrt.extend_bytes(pixels.flatten().map(PaletteColor::get_inx));
+            } else {
+                // 4 bits per sample
+                for row in pixels {
+                    wrt.extend_4bit_nums(row.iter().map(PaletteColor::get_inx))
+                }
+            }
 
             EncodeResult {
-                image_strip_offsets: vec![row_inx],
-                image_strip_bytecounts: vec![byte_count],
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
             }
         }
     }

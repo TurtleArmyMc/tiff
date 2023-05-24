@@ -132,8 +132,6 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
 }
 
 pub(crate) mod private {
-    use itertools::Itertools;
-
     use super::{BlackIsZero, NoCompression, WhiteIsZero};
     use crate::encode::private::EncodeResult;
     use crate::{
@@ -192,27 +190,15 @@ pub(crate) mod private {
             pixels: ChunksExact<'_, colors::Grayscale4Bit>,
             photo_iterp: P,
         ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len().try_into().unwrap();
-            let mut byte_count = 0;
+            let row_inx = wrt.align_and_get_len();
 
             for row in pixels {
-                for mut pair in &row.iter().chunks(2) {
-                    byte_count += 1;
-                    match (pair.next(), pair.next()) {
-                        (Some(p1), Some(p2)) => {
-                            wrt.append_byte(
-                                (photo_iterp.encode_pixel(*p1) << 4)
-                                    | photo_iterp.encode_pixel(*p2),
-                            );
-                        }
-                        (Some(p), None) => wrt.append_byte(photo_iterp.encode_pixel(*p) << 4),
-                        _ => (),
-                    }
-                }
+                wrt.extend_4bit_nums(row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)))
             }
+
             EncodeResult {
-                image_strip_offsets: vec![row_inx],
-                image_strip_bytecounts: vec![byte_count],
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
             }
         }
     }
