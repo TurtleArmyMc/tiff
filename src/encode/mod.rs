@@ -4,6 +4,7 @@ pub mod grayscale_4bit;
 pub mod grayscale_8bit;
 mod image_header;
 pub mod palette_color;
+pub mod rgb;
 
 pub use bilevel::BilevelImageEncoder;
 pub use image_header::EncodeEndianness;
