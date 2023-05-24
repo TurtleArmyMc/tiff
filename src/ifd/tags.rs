@@ -3,6 +3,7 @@
 pub enum PhotometricInterpretation {
     WhiteIsZero = 0,
     BlackIsZero = 1,
+    PaletteColor = 3,
 }
 
 /// [`super::ifd::IfdFieldTag::Compression`]

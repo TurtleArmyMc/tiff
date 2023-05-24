@@ -3,6 +3,7 @@ mod buffer;
 pub mod grayscale_4bit;
 pub mod grayscale_8bit;
 mod image_header;
+pub mod palette_color;
 
 pub use bilevel::BilevelImageEncoder;
 pub use image_header::EncodeEndianness;

@@ -16,14 +16,17 @@ pub struct Image<C: Color> {
 
 impl<C: Color> Image<C> {
     /// # Panics
-    /// If the number of elements in pixels is not equal to width * height
+    ///
+    /// Panics if the number of elements in pixels is 0 or not equal to width * height
     pub fn new(pixels: Vec<C>, width: usize, height: usize) -> Self {
         if width * height != pixels.len() {
             panic!(
-                "Expected {width}*{height} ({}) pixels but got {}",
+                "expected {width}*{height} ({}) pixels but got {}",
                 width * height,
                 pixels.len()
             )
+        } else if pixels.len() == 0 {
+            panic!("image can not be 0x0 pixels")
         }
         Self {
             pixels,

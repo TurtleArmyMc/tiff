@@ -90,6 +90,7 @@ pub(crate) enum Tag {
     YResolution = 283,
     PlanarConfiguration = 284,
     ResolutionUnit = 296,
+    ColorMap = 320,
     TileWidth = 322,
     TileLength = 323,
     TileOffsets = 324,
