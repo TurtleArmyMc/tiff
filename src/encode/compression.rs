@@ -2,6 +2,16 @@ use crate::types::Byte;
 
 use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
 
+pub trait Compression: sealed::CompressionImpl {}
+
+#[derive(Clone, Copy)]
+pub struct NoCompression;
+impl Compression for NoCompression {}
+
+#[derive(Clone, Copy)]
+pub struct PackBits;
+impl Compression for PackBits {}
+
 /// `If n is between 0 and 127 inclusive, copy the next n+1 bytes literally`
 ///
 /// The max length as it will appear encoded (starting at 0 for length 1).
@@ -175,5 +185,53 @@ impl<I: Iterator<Item = bool>> Iterator for BitPacker<I> {
             }
             byte
         })
+    }
+}
+
+mod sealed {
+    use crate::{
+        encode::{buffer::TiffEncodeBuffer, EncodeEndianness},
+        ifd,
+        types::Byte,
+    };
+
+    use super::{packbits, NoCompression, PackBits};
+
+    pub trait CompressionImpl {
+        fn compression_type_tag(&self) -> ifd::tags::Compression;
+
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        );
+    }
+
+    impl CompressionImpl for NoCompression {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::NoCompression
+        }
+
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            wrt.extend_bytes(iter)
+        }
+    }
+
+    impl CompressionImpl for PackBits {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::PackBits
+        }
+
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            packbits(wrt, iter)
+        }
     }
 }

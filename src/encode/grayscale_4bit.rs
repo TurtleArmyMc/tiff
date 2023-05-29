@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, slice::ChunksExact};
 
 use crate::{
     colors,
@@ -10,6 +10,7 @@ use crate::{
 
 use super::{
     buffer::TiffEncodeBuffer,
+    compression::{Compression, HalfBytePacker},
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };
@@ -22,16 +23,6 @@ pub struct WhiteIsZero;
 
 impl PhotometricInterpretation for BlackIsZero {}
 impl PhotometricInterpretation for WhiteIsZero {}
-
-pub trait Compression: private::ImageWriter {}
-
-#[derive(Clone, Copy)]
-pub struct NoCompression;
-impl Compression for NoCompression {}
-
-#[derive(Clone, Copy)]
-pub struct PackBits;
-impl Compression for PackBits {}
 
 pub struct Grayscale4BitImageEncoder<'a, E, C, P = BlackIsZero>
 where
@@ -71,9 +62,12 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
-        } = self
-            .image_compressor
-            .encode_grayscale_img(wrt, self.image.pixels(), self.photo_interp);
+        } = encode_grayscale_img(
+            wrt,
+            self.image.pixels(),
+            self.photo_interp,
+            &self.image_compressor,
+        );
 
         let ifd_inx = wrt.align_and_get_len();
 
@@ -135,18 +129,31 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
     }
 }
 
+fn encode_grayscale_img<E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>(
+    wrt: &mut TiffEncodeBuffer<E>,
+    pixels: ChunksExact<'_, colors::Grayscale4Bit>,
+    photo_iterp: P,
+    image_compressor: &C,
+) -> EncodeResult {
+    let row_inx = wrt.align_and_get_len();
+
+    image_compressor.encode(
+        wrt,
+        pixels.flat_map(|row| {
+            HalfBytePacker::new(row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)))
+        }),
+    );
+
+    EncodeResult {
+        image_strip_offsets: vec![row_inx.try_into().unwrap()],
+        image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
+    }
+}
+
 pub(crate) mod private {
-    use super::{BlackIsZero, NoCompression, PackBits, WhiteIsZero};
-    use crate::encode::compression;
-    use crate::encode::private::EncodeResult;
-    use crate::{
-        colors,
-        encode::{
-            buffer::TiffEncodeBuffer, grayscale_4bit::PhotometricInterpretation, EncodeEndianness,
-        },
-        ifd,
-    };
-    use std::slice::ChunksExact;
+    use crate::{colors, ifd};
+
+    use super::{BlackIsZero, WhiteIsZero};
 
     pub trait PhotometricInterpretationImpl: Copy {
         fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> u8;
@@ -170,72 +177,6 @@ pub(crate) mod private {
 
         fn tag(&self) -> ifd::tags::PhotometricInterpretation {
             ifd::tags::PhotometricInterpretation::WhiteIsZero
-        }
-    }
-
-    pub trait ImageWriter: Copy {
-        fn compression_type_tag(&self) -> ifd::tags::Compression;
-
-        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::Grayscale4Bit>,
-            photo_iterp: P,
-        ) -> EncodeResult;
-    }
-
-    impl ImageWriter for NoCompression {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::NoCompression
-        }
-
-        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::Grayscale4Bit>,
-            photo_iterp: P,
-        ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len();
-
-            wrt.extend_bytes(pixels.flat_map(|row| {
-                compression::HalfBytePacker::new(
-                    row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)),
-                )
-            }));
-
-            EncodeResult {
-                image_strip_offsets: vec![row_inx.try_into().unwrap()],
-                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
-            }
-        }
-    }
-
-    impl ImageWriter for PackBits {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::PackBits
-        }
-
-        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::Grayscale4Bit>,
-            photo_iterp: P,
-        ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len();
-
-            compression::packbits(
-                wrt,
-                pixels.flat_map(|row| {
-                    compression::HalfBytePacker::new(
-                        row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)),
-                    )
-                }),
-            );
-
-            EncodeResult {
-                image_strip_offsets: vec![row_inx.try_into().unwrap()],
-                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
-            }
         }
     }
 }

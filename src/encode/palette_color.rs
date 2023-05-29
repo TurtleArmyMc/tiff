@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, slice::ChunksExact};
 
 use crate::{
     colors,
@@ -10,19 +10,10 @@ use crate::{
 
 use super::{
     buffer::TiffEncodeBuffer,
+    compression::{Compression, HalfBytePacker},
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };
-
-pub trait Compression: private::ImageWriter {}
-
-#[derive(Clone, Copy)]
-pub struct NoCompression;
-impl Compression for NoCompression {}
-
-#[derive(Clone, Copy)]
-pub struct PackBits;
-impl Compression for PackBits {}
 
 pub struct PaletteColorImageEncoder<'a, E, C>
 where
@@ -54,9 +45,10 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
-        } = self.image_compressor.encode_palettized_img(
+        } = encode_palettized_img(
             wrt,
             self.image.pixels(),
+            &self.image_compressor,
             self.image.bits_per_palette_sample() as u8,
         );
 
@@ -129,87 +121,27 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
     }
 }
 
-pub(crate) mod private {
-    use super::{NoCompression, PackBits};
-    use crate::colors::PaletteColor;
-    use crate::encode::compression;
-    use crate::encode::private::EncodeResult;
-    use crate::{
-        colors,
-        encode::{buffer::TiffEncodeBuffer, EncodeEndianness},
-        ifd,
-    };
-    use std::slice::ChunksExact;
+fn encode_palettized_img<C: Compression, E: EncodeEndianness>(
+    wrt: &mut TiffEncodeBuffer<E>,
+    pixels: ChunksExact<'_, colors::PaletteColor>,
+    image_compressor: &C,
+    bits_per_sample: u8,
+) -> EncodeResult {
+    let row_inx = wrt.align_and_get_len();
 
-    pub trait ImageWriter: Copy {
-        fn compression_type_tag(&self) -> ifd::tags::Compression;
-
-        fn encode_palettized_img<E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::PaletteColor>,
-            bits_per_sample: u8,
-        ) -> EncodeResult;
+    if bits_per_sample == 8 {
+        image_compressor.encode(wrt, pixels.flatten().map(colors::PaletteColor::get_inx));
+    } else {
+        // 4 bits per sample
+        image_compressor.encode(
+            wrt,
+            pixels
+                .flat_map(|row| HalfBytePacker::new(row.iter().map(colors::PaletteColor::get_inx))),
+        );
     }
 
-    impl ImageWriter for NoCompression {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::NoCompression
-        }
-
-        fn encode_palettized_img<E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::PaletteColor>,
-            bits_per_sample: u8,
-        ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len();
-
-            if bits_per_sample == 8 {
-                wrt.extend_bytes(pixels.flatten().map(PaletteColor::get_inx));
-            } else {
-                // 4 bits per sample
-                wrt.extend_bytes(pixels.flat_map(|row| {
-                    compression::HalfBytePacker::new(row.iter().map(PaletteColor::get_inx))
-                }));
-            }
-
-            EncodeResult {
-                image_strip_offsets: vec![row_inx.try_into().unwrap()],
-                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
-            }
-        }
-    }
-
-    impl ImageWriter for PackBits {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::PackBits
-        }
-
-        fn encode_palettized_img<E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            pixels: ChunksExact<'_, colors::PaletteColor>,
-            bits_per_sample: u8,
-        ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len();
-
-            if bits_per_sample == 8 {
-                compression::packbits(wrt, pixels.flatten().map(PaletteColor::get_inx));
-            } else {
-                // 4 bits per sample
-                compression::packbits(
-                    wrt,
-                    pixels.flat_map(|row| {
-                        compression::HalfBytePacker::new(row.iter().map(PaletteColor::get_inx))
-                    }),
-                );
-            }
-
-            EncodeResult {
-                image_strip_offsets: vec![row_inx.try_into().unwrap()],
-                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
-            }
-        }
+    EncodeResult {
+        image_strip_offsets: vec![row_inx.try_into().unwrap()],
+        image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
     }
 }
