@@ -29,6 +29,10 @@ pub trait Compression: private::ImageWriter {}
 pub struct NoCompression;
 impl Compression for NoCompression {}
 
+#[derive(Clone, Copy)]
+pub struct PackBits;
+impl Compression for PackBits {}
+
 pub struct Grayscale8BitImageEncoder<'a, E, C, P = BlackIsZero>
 where
     C: Compression,
@@ -132,12 +136,12 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
 }
 
 pub(crate) mod private {
-    use super::{BlackIsZero, NoCompression, WhiteIsZero};
-    use crate::encode::private::EncodeResult;
+    use super::{BlackIsZero, NoCompression, PackBits, WhiteIsZero};
     use crate::{
         colors,
         encode::{
-            buffer::TiffEncodeBuffer, grayscale_8bit::PhotometricInterpretation, EncodeEndianness,
+            buffer::TiffEncodeBuffer, compression, grayscale_8bit::PhotometricInterpretation,
+            private::EncodeResult, EncodeEndianness,
         },
         ifd,
     };
@@ -193,6 +197,33 @@ pub(crate) mod private {
             let row_inx = wrt.align_and_get_len();
 
             wrt.extend_bytes(
+                pixels
+                    .flatten()
+                    .map(|pixel| photo_iterp.encode_pixel(*pixel)),
+            );
+
+            EncodeResult {
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
+            }
+        }
+    }
+
+    impl ImageWriter for PackBits {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::PackBits
+        }
+
+        fn encode_grayscale_img<E: EncodeEndianness, P: PhotometricInterpretation>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            pixels: ChunksExact<'_, colors::Grayscale8Bit>,
+            photo_iterp: P,
+        ) -> EncodeResult {
+            let row_inx = wrt.align_and_get_len();
+
+            compression::packbits(
+                wrt,
                 pixels
                     .flatten()
                     .map(|pixel| photo_iterp.encode_pixel(*pixel)),

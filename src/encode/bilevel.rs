@@ -29,6 +29,10 @@ pub trait Compression: private::ImageWriter {}
 pub struct NoCompression;
 impl Compression for NoCompression {}
 
+#[derive(Clone, Copy)]
+pub struct PackBits;
+impl Compression for PackBits {}
+
 pub struct BilevelImageEncoder<'a, E, C, P = BlackIsZero>
 where
     C: Compression,
@@ -131,26 +135,27 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
 }
 
 pub(crate) mod private {
-    use super::{BlackIsZero, NoCompression, WhiteIsZero};
-    use crate::encode::private::EncodeResult;
+    use super::{BlackIsZero, NoCompression, PackBits, WhiteIsZero};
     use crate::{
         colors,
-        encode::{bilevel::PhotometricInterpretation, buffer::TiffEncodeBuffer, EncodeEndianness},
+        encode::{
+            bilevel::PhotometricInterpretation, buffer::TiffEncodeBuffer, compression,
+            private::EncodeResult, EncodeEndianness,
+        },
         ifd,
     };
-    use itertools::Itertools;
     use std::slice::ChunksExact;
 
     pub trait PhotometricInterpretationImpl: Copy {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8;
+        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool;
         fn tag(&self) -> ifd::tags::PhotometricInterpretation;
     }
 
     impl PhotometricInterpretationImpl for BlackIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8 {
+        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
             match pixel {
-                colors::Bilevel::Black => 0,
-                colors::Bilevel::White => 1,
+                colors::Bilevel::Black => false,
+                colors::Bilevel::White => true,
             }
         }
 
@@ -160,10 +165,10 @@ pub(crate) mod private {
     }
 
     impl PhotometricInterpretationImpl for WhiteIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> u8 {
+        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
             match pixel {
-                colors::Bilevel::Black => 1,
-                colors::Bilevel::White => 0,
+                colors::Bilevel::Black => true,
+                colors::Bilevel::White => false,
             }
         }
 
@@ -194,23 +199,46 @@ pub(crate) mod private {
             pixels: ChunksExact<'_, colors::Bilevel>,
             photo_iterp: P,
         ) -> EncodeResult {
-            let row_inx = wrt.align_and_get_len().try_into().unwrap();
-            let mut byte_count = 0;
+            let row_inx = wrt.align_and_get_len();
 
-            for row in pixels {
-                for eight_pixels in &row.iter().chunks(8) {
-                    let mut packed_pixels = 0;
-                    for (bit, pixel) in (0..8).rev().zip(eight_pixels) {
-                        packed_pixels |= photo_iterp.encode_pixel(*pixel) << bit;
-                    }
-                    byte_count += 1;
-                    wrt.append_byte(packed_pixels);
-                }
-            }
+            wrt.extend_bytes(pixels.flat_map(|row| {
+                compression::BitPacker::new(
+                    row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)),
+                )
+            }));
 
             EncodeResult {
-                image_strip_offsets: vec![row_inx],
-                image_strip_bytecounts: vec![byte_count],
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
+            }
+        }
+    }
+
+    impl ImageWriter for PackBits {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::PackBits
+        }
+
+        fn encode_bilevel_img<E: EncodeEndianness, P: PhotometricInterpretation>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            pixels: ChunksExact<'_, colors::Bilevel>,
+            photo_iterp: P,
+        ) -> EncodeResult {
+            let row_inx = wrt.align_and_get_len();
+
+            compression::packbits(
+                wrt,
+                pixels.flat_map(|row| {
+                    compression::BitPacker::new(
+                        row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)),
+                    )
+                }),
+            );
+
+            EncodeResult {
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
             }
         }
     }

@@ -20,6 +20,10 @@ pub trait Compression: private::ImageWriter {}
 pub struct NoCompression;
 impl Compression for NoCompression {}
 
+#[derive(Clone, Copy)]
+pub struct PackBits;
+impl Compression for PackBits {}
+
 pub struct RGBImageEncoder<'a, E, C>
 where
     C: Compression,
@@ -115,6 +119,7 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl for RGBImageEncod
 }
 
 pub(crate) mod private {
+    use crate::encode::compression;
     use crate::encode::private::EncodeResult;
     use crate::{
         colors,
@@ -123,7 +128,7 @@ pub(crate) mod private {
     };
     use std::slice::ChunksExact;
 
-    use super::NoCompression;
+    use super::{NoCompression, PackBits};
 
     pub trait ImageWriter: Copy {
         fn compression_type_tag(&self) -> ifd::tags::Compression;
@@ -148,6 +153,32 @@ pub(crate) mod private {
             let row_inx = wrt.align_and_get_len();
 
             wrt.extend_bytes(
+                pixels
+                    .flatten()
+                    .flat_map(|pixel| [pixel.r, pixel.g, pixel.b]),
+            );
+
+            EncodeResult {
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
+            }
+        }
+    }
+
+    impl ImageWriter for PackBits {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::PackBits
+        }
+
+        fn encode_rgb_img<E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            pixels: ChunksExact<'_, colors::RGB>,
+        ) -> EncodeResult {
+            let row_inx = wrt.align_and_get_len();
+
+            compression::packbits(
+                wrt,
                 pixels
                     .flatten()
                     .flat_map(|pixel| [pixel.r, pixel.g, pixel.b]),

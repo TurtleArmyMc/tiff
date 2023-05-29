@@ -1,7 +1,6 @@
 use std::{io::Write, iter::repeat, marker::PhantomData, mem::size_of};
 
 use byteorder::WriteBytesExt;
-use itertools::Itertools;
 
 use crate::{
     ifd,
@@ -158,12 +157,8 @@ impl<E: EncodeEndianness> TiffEncodeBuffer<E> {
         self.bytes.extend(iter)
     }
 
-    pub(crate) fn extend_4bit_nums<I: Iterator<Item = Byte>>(&mut self, iter: I) {
-        for mut pair in &iter.chunks(2) {
-            self.append_byte(
-                (pair.next().unwrap_or_default() << 4) | pair.next().unwrap_or_default(),
-            );
-        }
+    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut u8> {
+        self.bytes.get_mut(index)
     }
 
     pub(crate) fn len(&self) -> usize {

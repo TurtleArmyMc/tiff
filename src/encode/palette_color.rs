@@ -20,6 +20,10 @@ pub trait Compression: private::ImageWriter {}
 pub struct NoCompression;
 impl Compression for NoCompression {}
 
+#[derive(Clone, Copy)]
+pub struct PackBits;
+impl Compression for PackBits {}
+
 pub struct PaletteColorImageEncoder<'a, E, C>
 where
     C: Compression,
@@ -126,8 +130,9 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
 }
 
 pub(crate) mod private {
-    use super::NoCompression;
+    use super::{NoCompression, PackBits};
     use crate::colors::PaletteColor;
+    use crate::encode::compression;
     use crate::encode::private::EncodeResult;
     use crate::{
         colors,
@@ -164,9 +169,41 @@ pub(crate) mod private {
                 wrt.extend_bytes(pixels.flatten().map(PaletteColor::get_inx));
             } else {
                 // 4 bits per sample
-                for row in pixels {
-                    wrt.extend_4bit_nums(row.iter().map(PaletteColor::get_inx))
-                }
+                wrt.extend_bytes(pixels.flat_map(|row| {
+                    compression::HalfBytePacker::new(row.iter().map(PaletteColor::get_inx))
+                }));
+            }
+
+            EncodeResult {
+                image_strip_offsets: vec![row_inx.try_into().unwrap()],
+                image_strip_bytecounts: vec![(wrt.len() - row_inx).try_into().unwrap()],
+            }
+        }
+    }
+
+    impl ImageWriter for PackBits {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::PackBits
+        }
+
+        fn encode_palettized_img<E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            pixels: ChunksExact<'_, colors::PaletteColor>,
+            bits_per_sample: u8,
+        ) -> EncodeResult {
+            let row_inx = wrt.align_and_get_len();
+
+            if bits_per_sample == 8 {
+                compression::packbits(wrt, pixels.flatten().map(PaletteColor::get_inx));
+            } else {
+                // 4 bits per sample
+                compression::packbits(
+                    wrt,
+                    pixels.flat_map(|row| {
+                        compression::HalfBytePacker::new(row.iter().map(PaletteColor::get_inx))
+                    }),
+                );
             }
 
             EncodeResult {
