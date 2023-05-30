@@ -4,30 +4,22 @@ use crate::{
     colors,
     encode::{encode_ifds, private::EncodeResult},
     ifd,
-    types::{Short, URational},
+    types::{Byte, Short, URational},
     Image,
 };
 
 use super::{
     buffer::TiffEncodeBuffer,
     compression::{Compression, HalfBytePacker},
+    photo_interp::{self, PhotometricInterpretation},
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };
 
-pub trait PhotometricInterpretation: private::PhotometricInterpretationImpl {}
-#[derive(Clone, Copy)]
-pub struct BlackIsZero;
-#[derive(Clone, Copy)]
-pub struct WhiteIsZero;
-
-impl PhotometricInterpretation for BlackIsZero {}
-impl PhotometricInterpretation for WhiteIsZero {}
-
-pub struct Grayscale4BitImageEncoder<'a, E, C, P = BlackIsZero>
+pub struct Grayscale4BitImageEncoder<'a, E, C, P = photo_interp::BlackIsZero>
 where
     C: Compression<colors::Grayscale4Bit>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Grayscale4Bit>,
 {
     image: &'a Image<colors::Grayscale4Bit>,
     image_compressor: C,
@@ -39,7 +31,7 @@ impl<'a, E, C, P> Grayscale4BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale4Bit>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Grayscale4Bit>,
 {
     pub fn new(image: &'a Image<colors::Grayscale4Bit>, compression: C, photo_interp: P) -> Self {
         Self {
@@ -55,7 +47,7 @@ impl<'a, E, C, P> ImageEncoder for Grayscale4BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale4Bit>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Grayscale4Bit>,
 {
 }
 
@@ -63,7 +55,7 @@ impl<'a, E, C, P> ImageEncoderImpl for Grayscale4BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale4Bit>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Grayscale4Bit>,
 {
     type Endianness = E;
 
@@ -74,7 +66,7 @@ where
         } = encode_grayscale_img(
             wrt,
             self.image.pixels(),
-            self.photo_interp,
+            &self.photo_interp,
             &self.image_compressor,
         );
 
@@ -141,13 +133,13 @@ where
 fn encode_grayscale_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::Grayscale4Bit>,
-    photo_iterp: P,
+    photo_iterp: &P,
     image_compressor: &C,
 ) -> EncodeResult
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale4Bit>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Grayscale4Bit>,
 {
     let row_inx = wrt.align_and_get_len();
 
@@ -164,33 +156,18 @@ where
     }
 }
 
-pub(crate) mod private {
-    use crate::{colors, ifd};
-
-    use super::{BlackIsZero, WhiteIsZero};
-
-    pub trait PhotometricInterpretationImpl: Copy {
-        fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> u8;
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation;
+impl photo_interp::private::PhotometricInterpretationImpl<colors::Grayscale4Bit>
+    for photo_interp::BlackIsZero
+{
+    fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> Byte {
+        pixel.value()
     }
+}
 
-    impl PhotometricInterpretationImpl for BlackIsZero {
-        fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> u8 {
-            pixel.value()
-        }
-
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
-            ifd::tags::PhotometricInterpretation::BlackIsZero
-        }
-    }
-
-    impl PhotometricInterpretationImpl for WhiteIsZero {
-        fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> u8 {
-            0b1111 - pixel.value()
-        }
-
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
-            ifd::tags::PhotometricInterpretation::WhiteIsZero
-        }
+impl photo_interp::private::PhotometricInterpretationImpl<colors::Grayscale4Bit>
+    for photo_interp::WhiteIsZero
+{
+    fn encode_pixel(&self, pixel: colors::Grayscale4Bit) -> Byte {
+        0b1111 - pixel.value()
     }
 }

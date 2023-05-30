@@ -11,23 +11,15 @@ use crate::{
 use super::{
     buffer::TiffEncodeBuffer,
     compression::{BitPacker, Compression},
+    photo_interp::{self, PhotometricInterpretation},
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };
 
-pub trait PhotometricInterpretation: private::PhotometricInterpretationImpl {}
-#[derive(Clone, Copy)]
-pub struct BlackIsZero;
-#[derive(Clone, Copy)]
-pub struct WhiteIsZero;
-
-impl PhotometricInterpretation for BlackIsZero {}
-impl PhotometricInterpretation for WhiteIsZero {}
-
-pub struct BilevelImageEncoder<'a, E, C, P = BlackIsZero>
+pub struct BilevelImageEncoder<'a, E, C, P = photo_interp::BlackIsZero>
 where
     C: Compression<colors::Bilevel>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Bilevel>,
 {
     image: &'a Image<colors::Bilevel>,
     image_compressor: C,
@@ -39,7 +31,7 @@ impl<'a, E, C, P> BilevelImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Bilevel>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Bilevel>,
 {
     pub fn new(image: &'a Image<colors::Bilevel>, compression: C, photo_interp: P) -> Self {
         Self {
@@ -55,7 +47,7 @@ impl<'a, E, C, P> ImageEncoder for BilevelImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Bilevel>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Bilevel>,
 {
 }
 
@@ -63,7 +55,7 @@ impl<'a, E, C, P> ImageEncoderImpl for BilevelImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Bilevel>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Bilevel>,
 {
     type Endianness = E;
 
@@ -74,7 +66,7 @@ where
         } = encode_bilevel_img(
             wrt,
             self.image.pixels(),
-            self.photo_interp,
+            &self.photo_interp,
             &self.image_compressor,
         );
 
@@ -140,13 +132,13 @@ where
 fn encode_bilevel_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::Bilevel>,
-    photo_iterp: P,
+    photo_iterp: &P,
     image_compressor: &C,
 ) -> EncodeResult
 where
     E: EncodeEndianness,
     C: Compression<colors::Bilevel>,
-    P: PhotometricInterpretation,
+    P: PhotometricInterpretation<colors::Bilevel>,
 {
     let row_inx = wrt.align_and_get_len();
 
@@ -163,38 +155,24 @@ where
     }
 }
 
-pub(crate) mod private {
-    use super::{BlackIsZero, WhiteIsZero};
-    use crate::{colors, ifd};
-
-    pub trait PhotometricInterpretationImpl: Copy {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool;
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation;
-    }
-
-    impl PhotometricInterpretationImpl for BlackIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
-            match pixel {
-                colors::Bilevel::Black => false,
-                colors::Bilevel::White => true,
-            }
-        }
-
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
-            ifd::tags::PhotometricInterpretation::BlackIsZero
+impl photo_interp::private::PhotometricInterpretationImpl<colors::Bilevel>
+    for photo_interp::BlackIsZero
+{
+    fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
+        match pixel {
+            colors::Bilevel::Black => false,
+            colors::Bilevel::White => true,
         }
     }
+}
 
-    impl PhotometricInterpretationImpl for WhiteIsZero {
-        fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
-            match pixel {
-                colors::Bilevel::Black => true,
-                colors::Bilevel::White => false,
-            }
-        }
-
-        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
-            ifd::tags::PhotometricInterpretation::WhiteIsZero
+impl photo_interp::private::PhotometricInterpretationImpl<colors::Bilevel>
+    for photo_interp::WhiteIsZero
+{
+    fn encode_pixel(&self, pixel: colors::Bilevel) -> bool {
+        match pixel {
+            colors::Bilevel::Black => true,
+            colors::Bilevel::White => false,
         }
     }
 }
