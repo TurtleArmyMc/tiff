@@ -26,7 +26,7 @@ impl PhotometricInterpretation for WhiteIsZero {}
 
 pub struct BilevelImageEncoder<'a, E, C, P = BlackIsZero>
 where
-    C: Compression,
+    C: Compression<colors::Bilevel>,
     P: PhotometricInterpretation,
 {
     image: &'a Image<colors::Bilevel>,
@@ -35,8 +35,11 @@ where
     endianness: PhantomData<E>,
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
-    BilevelImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> BilevelImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Bilevel>,
+    P: PhotometricInterpretation,
 {
     pub fn new(image: &'a Image<colors::Bilevel>, compression: C, photo_interp: P) -> Self {
         Self {
@@ -48,13 +51,19 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
     }
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoder
-    for BilevelImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> ImageEncoder for BilevelImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Bilevel>,
+    P: PhotometricInterpretation,
 {
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoderImpl
-    for BilevelImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> ImageEncoderImpl for BilevelImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Bilevel>,
+    P: PhotometricInterpretation,
 {
     type Endianness = E;
 
@@ -128,12 +137,17 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
     }
 }
 
-fn encode_bilevel_img<E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>(
+fn encode_bilevel_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::Bilevel>,
     photo_iterp: P,
     image_compressor: &C,
-) -> EncodeResult {
+) -> EncodeResult
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Bilevel>,
+    P: PhotometricInterpretation,
+{
     let row_inx = wrt.align_and_get_len();
 
     image_compressor.encode(

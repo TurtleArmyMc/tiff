@@ -26,7 +26,7 @@ impl PhotometricInterpretation for WhiteIsZero {}
 
 pub struct Grayscale4BitImageEncoder<'a, E, C, P = BlackIsZero>
 where
-    C: Compression,
+    C: Compression<colors::Grayscale4Bit>,
     P: PhotometricInterpretation,
 {
     image: &'a Image<colors::Grayscale4Bit>,
@@ -35,8 +35,11 @@ where
     endianness: PhantomData<E>,
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
-    Grayscale4BitImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> Grayscale4BitImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Grayscale4Bit>,
+    P: PhotometricInterpretation,
 {
     pub fn new(image: &'a Image<colors::Grayscale4Bit>, compression: C, photo_interp: P) -> Self {
         Self {
@@ -48,13 +51,19 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>
     }
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoder
-    for Grayscale4BitImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> ImageEncoder for Grayscale4BitImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Grayscale4Bit>,
+    P: PhotometricInterpretation,
 {
 }
 
-impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> ImageEncoderImpl
-    for Grayscale4BitImageEncoder<'a, E, C, P>
+impl<'a, E, C, P> ImageEncoderImpl for Grayscale4BitImageEncoder<'a, E, C, P>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Grayscale4Bit>,
+    P: PhotometricInterpretation,
 {
     type Endianness = E;
 
@@ -129,12 +138,17 @@ impl<'a, E: EncodeEndianness, C: Compression, P: PhotometricInterpretation> Imag
     }
 }
 
-fn encode_grayscale_img<E: EncodeEndianness, C: Compression, P: PhotometricInterpretation>(
+fn encode_grayscale_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::Grayscale4Bit>,
     photo_iterp: P,
     image_compressor: &C,
-) -> EncodeResult {
+) -> EncodeResult
+where
+    E: EncodeEndianness,
+    C: Compression<colors::Grayscale4Bit>,
+    P: PhotometricInterpretation,
+{
     let row_inx = wrt.align_and_get_len();
 
     image_compressor.encode(

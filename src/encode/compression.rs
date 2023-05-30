@@ -1,16 +1,16 @@
-use crate::types::Byte;
+use crate::{colors, types::Byte};
 
 use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
 
-pub trait Compression: sealed::CompressionImpl {}
+pub trait Compression<C: colors::Color>: sealed::CompressionImpl {}
 
 #[derive(Clone, Copy)]
 pub struct NoCompression;
-impl Compression for NoCompression {}
+impl<C: colors::Color> Compression<C> for NoCompression {}
 
 #[derive(Clone, Copy)]
 pub struct PackBits;
-impl Compression for PackBits {}
+impl<C: colors::Color> Compression<C> for PackBits {}
 
 /// `If n is between 0 and 127 inclusive, copy the next n+1 bytes literally`
 ///

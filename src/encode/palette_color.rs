@@ -17,14 +17,16 @@ use super::{
 
 pub struct PaletteColorImageEncoder<'a, E, C>
 where
-    C: Compression,
+    C: Compression<colors::PaletteColor<'a>>,
 {
     image: &'a Image<colors::PaletteColor<'a>>,
     image_compressor: C,
     endianness: PhantomData<E>,
 }
 
-impl<'a, E: EncodeEndianness, C: Compression> PaletteColorImageEncoder<'a, E, C> {
+impl<'a, E: EncodeEndianness, C: Compression<colors::PaletteColor<'a>>>
+    PaletteColorImageEncoder<'a, E, C>
+{
     pub fn new(image: &'a Image<colors::PaletteColor<'a>>, compression: C) -> Self {
         Self {
             image,
@@ -34,10 +36,17 @@ impl<'a, E: EncodeEndianness, C: Compression> PaletteColorImageEncoder<'a, E, C>
     }
 }
 
-impl<'a, E: EncodeEndianness, C: Compression> ImageEncoder for PaletteColorImageEncoder<'a, E, C> {}
+impl<'a, E, C> ImageEncoder for PaletteColorImageEncoder<'a, E, C>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::PaletteColor<'a>>,
+{
+}
 
-impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
-    for PaletteColorImageEncoder<'a, E, C>
+impl<'a, E, C> ImageEncoderImpl for PaletteColorImageEncoder<'a, E, C>
+where
+    E: EncodeEndianness,
+    C: Compression<colors::PaletteColor<'a>>,
 {
     type Endianness = E;
 
@@ -121,12 +130,16 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl
     }
 }
 
-fn encode_palettized_img<C: Compression, E: EncodeEndianness>(
+fn encode_palettized_img<'a, C, E>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::PaletteColor>,
     image_compressor: &C,
     bits_per_sample: u8,
-) -> EncodeResult {
+) -> EncodeResult
+where
+    C: Compression<colors::PaletteColor<'a>>,
+    E: EncodeEndianness,
+{
     let row_inx = wrt.align_and_get_len();
 
     if bits_per_sample == 8 {

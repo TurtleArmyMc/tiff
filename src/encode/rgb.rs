@@ -17,14 +17,14 @@ use super::{
 
 pub struct RGBImageEncoder<'a, E, C>
 where
-    C: Compression,
+    C: Compression<colors::RGB>,
 {
     image: &'a Image<colors::RGB>,
     image_compressor: C,
     endianness: PhantomData<E>,
 }
 
-impl<'a, E: EncodeEndianness, C: Compression> RGBImageEncoder<'a, E, C> {
+impl<'a, E: EncodeEndianness, C: Compression<colors::RGB>> RGBImageEncoder<'a, E, C> {
     pub fn new(image: &'a Image<colors::RGB>, compression: C) -> Self {
         Self {
             image,
@@ -35,9 +35,14 @@ impl<'a, E: EncodeEndianness, C: Compression> RGBImageEncoder<'a, E, C> {
     }
 }
 
-impl<'a, E: EncodeEndianness, C: Compression> ImageEncoder for RGBImageEncoder<'a, E, C> {}
+impl<'a, E: EncodeEndianness, C: Compression<colors::RGB>> ImageEncoder
+    for RGBImageEncoder<'a, E, C>
+{
+}
 
-impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl for RGBImageEncoder<'a, E, C> {
+impl<'a, E: EncodeEndianness, C: Compression<colors::RGB>> ImageEncoderImpl
+    for RGBImageEncoder<'a, E, C>
+{
     type Endianness = E;
 
     fn append_image_to_buffer(&self, wrt: &mut TiffEncodeBuffer<E>) -> IfdInfo {
@@ -107,7 +112,7 @@ impl<'a, E: EncodeEndianness, C: Compression> ImageEncoderImpl for RGBImageEncod
     }
 }
 
-fn encode_rgb_img<C: Compression, E: EncodeEndianness>(
+fn encode_rgb_img<C: Compression<colors::RGB>, E: EncodeEndianness>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::RGB>,
     image_compressor: &C,
