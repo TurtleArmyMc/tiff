@@ -2,7 +2,7 @@ use std::iter::repeat;
 
 use crate::{types::Short, Image};
 
-pub trait Color: private::ColorInfo {}
+pub trait Color: Copy {}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Bilevel {
@@ -179,33 +179,5 @@ impl<'a> PaletteColor<'a> {
 
     pub(crate) fn bits_per_palette_sample(&self) -> Short {
         self.map.bits_per_palette_sample()
-    }
-}
-
-pub(crate) mod private {
-    use crate::types::Byte;
-
-    pub trait ColorInfo {
-        type EncodeTo;
-    }
-
-    impl ColorInfo for super::Bilevel {
-        type EncodeTo = bool;
-    }
-
-    impl ColorInfo for super::Grayscale8Bit {
-        type EncodeTo = Byte;
-    }
-
-    impl ColorInfo for super::Grayscale4Bit {
-        type EncodeTo = Byte;
-    }
-
-    impl ColorInfo for super::RGB {
-        type EncodeTo = super::RGB;
-    }
-
-    impl<'a> ColorInfo for super::PaletteColor<'a> {
-        type EncodeTo = Byte;
     }
 }

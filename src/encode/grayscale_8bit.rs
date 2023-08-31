@@ -4,22 +4,30 @@ use crate::{
     colors,
     encode::{encode_ifds, private::EncodeResult},
     ifd,
-    types::{Byte, Short, URational},
+    types::{Short, URational},
     Image,
 };
 
 use super::{
     buffer::TiffEncodeBuffer,
     compression::Compression,
-    photo_interp::{self, BlackIsZero, PhotometricInterpretation},
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };
 
+pub trait PhotometricInterpretation: private::PhotometricInterpretationImpl {}
+#[derive(Clone, Copy)]
+pub struct BlackIsZero;
+#[derive(Clone, Copy)]
+pub struct WhiteIsZero;
+
+impl PhotometricInterpretation for BlackIsZero {}
+impl PhotometricInterpretation for WhiteIsZero {}
+
 pub struct Grayscale8BitImageEncoder<'a, E, C, P = BlackIsZero>
 where
     C: Compression<colors::Grayscale8Bit>,
-    P: PhotometricInterpretation<colors::Grayscale8Bit>,
+    P: PhotometricInterpretation,
 {
     image: &'a Image<colors::Grayscale8Bit>,
     image_compressor: C,
@@ -31,7 +39,7 @@ impl<'a, E, C, P> Grayscale8BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale8Bit>,
-    P: PhotometricInterpretation<colors::Grayscale8Bit>,
+    P: PhotometricInterpretation,
 {
     pub fn new(image: &'a Image<colors::Grayscale8Bit>, compression: C, photo_interp: P) -> Self {
         Self {
@@ -47,7 +55,7 @@ impl<'a, E, C, P> ImageEncoder for Grayscale8BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale8Bit>,
-    P: PhotometricInterpretation<colors::Grayscale8Bit>,
+    P: PhotometricInterpretation,
 {
 }
 
@@ -55,7 +63,7 @@ impl<'a, E, C, P> ImageEncoderImpl for Grayscale8BitImageEncoder<'a, E, C, P>
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale8Bit>,
-    P: PhotometricInterpretation<colors::Grayscale8Bit>,
+    P: PhotometricInterpretation,
 {
     type Endianness = E;
 
@@ -66,7 +74,7 @@ where
         } = encode_grayscale_img(
             wrt,
             self.image.pixels(),
-            &self.photo_interp,
+            self.photo_interp,
             &self.image_compressor,
         );
 
@@ -133,13 +141,13 @@ where
 fn encode_grayscale_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
     pixels: ChunksExact<'_, colors::Grayscale8Bit>,
-    photo_iterp: &P,
+    photo_iterp: P,
     image_compressor: &C,
 ) -> EncodeResult
 where
     E: EncodeEndianness,
     C: Compression<colors::Grayscale8Bit>,
-    P: PhotometricInterpretation<colors::Grayscale8Bit>,
+    P: PhotometricInterpretation,
 {
     let row_inx = wrt.align_and_get_len();
 
@@ -156,18 +164,32 @@ where
     }
 }
 
-impl photo_interp::private::PhotometricInterpretationImpl<colors::Grayscale8Bit>
-    for photo_interp::BlackIsZero
-{
-    fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> Byte {
-        pixel.0
-    }
-}
+pub(crate) mod private {
+    use super::{BlackIsZero, WhiteIsZero};
+    use crate::{colors, ifd};
 
-impl photo_interp::private::PhotometricInterpretationImpl<colors::Grayscale8Bit>
-    for photo_interp::WhiteIsZero
-{
-    fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> Byte {
-        Byte::MAX - pixel.0
+    pub trait PhotometricInterpretationImpl: Copy {
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8;
+        fn tag(&self) -> ifd::tags::PhotometricInterpretation;
+    }
+
+    impl PhotometricInterpretationImpl for BlackIsZero {
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8 {
+            pixel.0
+        }
+
+        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
+            ifd::tags::PhotometricInterpretation::BlackIsZero
+        }
+    }
+
+    impl PhotometricInterpretationImpl for WhiteIsZero {
+        fn encode_pixel(&self, pixel: colors::Grayscale8Bit) -> u8 {
+            0xFF - pixel.0
+        }
+
+        fn tag(&self) -> ifd::tags::PhotometricInterpretation {
+            ifd::tags::PhotometricInterpretation::WhiteIsZero
+        }
     }
 }
