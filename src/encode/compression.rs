@@ -275,8 +275,8 @@ pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
         }
     }
 
-    fn get_bitcount(code: u16) -> u8 {
-        match code {
+    fn get_bitcount(string_table: &HashMap<Vec<u8>, u16>) -> u8 {
+        match FIRST_CODE + string_table.len() as u16 {
             0..=255 => panic!(),
             256..=511 => 9,
             512..=1023 => 10,
@@ -315,11 +315,7 @@ pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
         curr.push(byte);
         if curr.len() > 1 && !string_table.contains_key(&curr) {
             let code = get_code(&string_table, &curr[..curr.len() - 1]);
-            append_code(
-                &mut bits,
-                code,
-                get_bitcount(FIRST_CODE + string_table.len() as u16),
-            );
+            append_code(&mut bits, code, get_bitcount(&string_table));
             add_entry(&mut bits, &mut string_table, &curr);
             curr.clear();
             curr.push(byte);
@@ -327,7 +323,7 @@ pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
     }
 
     let code = get_code(&string_table, &curr);
-    let bitcount = get_bitcount(FIRST_CODE + string_table.len() as u16);
+    let bitcount = get_bitcount(&string_table);
     append_code(&mut bits, code, bitcount);
     append_code(&mut bits, END_OF_INFORMATION_CODE, bitcount);
 
