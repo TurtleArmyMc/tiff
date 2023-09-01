@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{colors, types::Byte};
 
 use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
@@ -11,6 +13,10 @@ impl<C: colors::Color> Compression<C> for NoCompression {}
 #[derive(Clone, Copy)]
 pub struct PackBits;
 impl<C: colors::Color> Compression<C> for PackBits {}
+
+#[derive(Clone, Copy)]
+pub struct Lzw;
+impl<C: colors::Color> Compression<C> for Lzw {}
 
 /// `If n is between 0 and 127 inclusive, copy the next n+1 bytes literally`
 ///
@@ -195,7 +201,7 @@ mod sealed {
         types::Byte,
     };
 
-    use super::{packbits, NoCompression, PackBits};
+    use super::{lzw, packbits, Lzw, NoCompression, PackBits};
 
     pub trait CompressionImpl {
         fn compression_type_tag(&self) -> ifd::tags::Compression;
@@ -234,4 +240,96 @@ mod sealed {
             packbits(wrt, iter)
         }
     }
+
+    impl CompressionImpl for Lzw {
+        fn compression_type_tag(&self) -> ifd::tags::Compression {
+            ifd::tags::Compression::Lzw
+        }
+
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            lzw(wrt, iter)
+        }
+    }
+}
+
+/// Writes bytes using LZW compression.
+pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
+    wrt: &mut TiffEncodeBuffer<E>,
+    mut iter: I,
+) {
+    const CLEAR_CODE: u16 = 256;
+    const END_OF_INFORMATION_CODE: u16 = 257;
+    const FIRST_CODE: u16 = 258;
+    // Codes should only be up to 12 bits
+    const MAX_CODE: u16 = 4094;
+
+    let mut bits = Vec::new();
+
+    fn append_code(bits: &mut Vec<bool>, code: u16, bitcount: u8) {
+        for i in (0..bitcount).rev() {
+            bits.push(((code >> i) & 1) != 0);
+        }
+    }
+
+    fn get_bitcount(code: u16) -> u8 {
+        match code {
+            0..=255 => panic!(),
+            256..=511 => 9,
+            512..=1023 => 10,
+            1024..=2047 => 11,
+            2048..=MAX_CODE => 12,
+            4095.. => panic!(),
+        }
+    }
+
+    fn get_code(string_table: &HashMap<Vec<u8>, u16>, string: &[u8]) -> u16 {
+        match string {
+            [byte] => *byte as u16,
+            string => string_table[string],
+        }
+    }
+
+    fn add_entry(bits: &mut Vec<bool>, string_table: &mut HashMap<Vec<u8>, u16>, string: &[u8]) {
+        let next_code = FIRST_CODE + string_table.len() as u16;
+        string_table.insert(string.into(), next_code);
+        if next_code == MAX_CODE {
+            append_code(bits, CLEAR_CODE, 12);
+            string_table.clear();
+        }
+    }
+
+    let mut curr = Vec::new();
+    curr.push(match iter.next() {
+        Some(byte) => byte,
+        None => panic!(),
+    });
+    let mut string_table: HashMap<Vec<u8>, u16> = HashMap::new();
+
+    append_code(&mut bits, CLEAR_CODE, 9);
+
+    for byte in iter {
+        curr.push(byte);
+        if curr.len() > 1 && !string_table.contains_key(&curr) {
+            let code = get_code(&string_table, &curr[..curr.len() - 1]);
+            append_code(
+                &mut bits,
+                code,
+                get_bitcount(FIRST_CODE + string_table.len() as u16),
+            );
+            add_entry(&mut bits, &mut string_table, &curr);
+            curr.clear();
+            curr.push(byte);
+        }
+    }
+
+    let code = get_code(&string_table, &curr);
+    let bitcount = get_bitcount(FIRST_CODE + string_table.len() as u16);
+    append_code(&mut bits, code, bitcount);
+    append_code(&mut bits, END_OF_INFORMATION_CODE, bitcount);
+
+    wrt.extend_bytes(BitPacker::new(bits.into_iter()));
 }

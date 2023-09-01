@@ -13,6 +13,7 @@ pub enum Compression {
     NoCompression = 1,
     /// CCITT Group 3 1-Dimensional Modified Huffman run length encoding
     Huffman = 2,
+    Lzw = 5,
     PackBits = 32773,
 }
 
