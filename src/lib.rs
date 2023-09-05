@@ -1,4 +1,8 @@
-use std::slice::{ChunksExact, ChunksExactMut};
+use std::{
+    error::Error,
+    fmt::Display,
+    slice::{ChunksExact, ChunksExactMut},
+};
 
 use colors::Color;
 
@@ -19,19 +23,24 @@ impl<C: Color> Image<C> {
     ///
     /// Panics if the number of elements in pixels is 0 or not equal to width * height
     pub fn new(pixels: Vec<C>, width: usize, height: usize) -> Self {
+        Self::try_new(pixels, width, height).unwrap()
+    }
+
+    pub fn try_new(pixels: Vec<C>, width: usize, height: usize) -> Result<Self, ImageCreateError> {
         if width * height != pixels.len() {
-            panic!(
-                "expected {width}*{height} ({}) pixels but got {}",
-                width * height,
-                pixels.len()
-            )
+            Err(ImageCreateError::DimensionMismatch {
+                width,
+                height,
+                pixel_count: pixels.len(),
+            })
         } else if pixels.len() == 0 {
-            panic!("image can not be 0x0 pixels")
-        }
-        Self {
-            pixels,
-            width,
-            height,
+            Err(ImageCreateError::NoPixels)
+        } else {
+            Ok(Self {
+                pixels,
+                width,
+                height,
+            })
         }
     }
 
@@ -60,17 +69,31 @@ impl<C: Color> Image<C> {
     }
 }
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+#[derive(Debug)]
+pub enum ImageCreateError {
+    DimensionMismatch {
+        width: usize,
+        height: usize,
+        pixel_count: usize,
+    },
+    NoPixels,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+impl Display for ImageCreateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImageCreateError::DimensionMismatch {
+                width,
+                height,
+                pixel_count,
+            } => write!(
+                f,
+                "expected {width}*{height} ({}) pixels but got {pixel_count}",
+                width * height,
+            ),
+            ImageCreateError::NoPixels => write!(f, "image can not be 0x0 pixels"),
+        }
     }
 }
+
+impl Error for ImageCreateError {}
