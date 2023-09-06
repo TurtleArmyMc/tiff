@@ -49,7 +49,7 @@ impl<'a, E: EncodeEndianness, C: Compression<colors::RGB>> ImageEncoderImpl
         let EncodeResult {
             image_strip_offsets,
             image_strip_bytecounts,
-        } = encode_rgb_img(wrt, self.image.pixels(), &self.image_compressor);
+        } = encode_rgb_img(wrt, self.image.rows(), &self.image_compressor);
 
         let ifd_inx = wrt.align_and_get_len();
 
@@ -114,16 +114,14 @@ impl<'a, E: EncodeEndianness, C: Compression<colors::RGB>> ImageEncoderImpl
 
 fn encode_rgb_img<C: Compression<colors::RGB>, E: EncodeEndianness>(
     wrt: &mut TiffEncodeBuffer<E>,
-    pixels: ChunksExact<'_, colors::RGB>,
+    rows: ChunksExact<'_, colors::RGB>,
     image_compressor: &C,
 ) -> EncodeResult {
     let row_inx = wrt.align_and_get_len();
 
     image_compressor.encode(
         wrt,
-        pixels
-            .flatten()
-            .flat_map(|pixel| [pixel.r, pixel.g, pixel.b]),
+        rows.flatten().flat_map(|pixel| [pixel.r, pixel.g, pixel.b]),
     );
 
     EncodeResult {

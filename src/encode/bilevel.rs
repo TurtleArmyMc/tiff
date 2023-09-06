@@ -73,7 +73,7 @@ where
             image_strip_bytecounts,
         } = encode_bilevel_img(
             wrt,
-            self.image.pixels(),
+            self.image.rows(),
             self.photo_interp,
             &self.image_compressor,
         );
@@ -139,7 +139,7 @@ where
 
 fn encode_bilevel_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
-    pixels: ChunksExact<'_, colors::Bilevel>,
+    rows: ChunksExact<'_, colors::Bilevel>,
     photo_iterp: P,
     image_compressor: &C,
 ) -> EncodeResult
@@ -152,7 +152,7 @@ where
 
     image_compressor.encode(
         wrt,
-        pixels.flat_map(|row| {
+        rows.flat_map(|row| {
             BitPacker::new(row.iter().map(|pixel| photo_iterp.encode_pixel(*pixel)))
         }),
     );

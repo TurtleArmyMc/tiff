@@ -73,7 +73,7 @@ where
             image_strip_bytecounts,
         } = encode_grayscale_img(
             wrt,
-            self.image.pixels(),
+            self.image.rows(),
             self.photo_interp,
             &self.image_compressor,
         );
@@ -140,7 +140,7 @@ where
 
 fn encode_grayscale_img<E, C, P>(
     wrt: &mut TiffEncodeBuffer<E>,
-    pixels: ChunksExact<'_, colors::Grayscale8Bit>,
+    rows: ChunksExact<'_, colors::Grayscale8Bit>,
     photo_iterp: P,
     image_compressor: &C,
 ) -> EncodeResult
@@ -153,9 +153,7 @@ where
 
     image_compressor.encode(
         wrt,
-        pixels
-            .flatten()
-            .map(|pixel| photo_iterp.encode_pixel(*pixel)),
+        rows.flatten().map(|pixel| photo_iterp.encode_pixel(*pixel)),
     );
 
     EncodeResult {

@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    fmt::Display,
-    slice::{ChunksExact, ChunksExactMut},
-};
+use std::{error::Error, fmt::Display, slice::ChunksExact};
 
 use colors::Color;
 
@@ -19,6 +15,8 @@ pub struct Image<C: Color> {
 }
 
 impl<C: Color> Image<C> {
+    /// Pixels are arranged left to right, then top to bottom.
+    ///
     /// # Panics
     ///
     /// Panics if the number of elements in pixels is 0 or not equal to width * height
@@ -26,6 +24,7 @@ impl<C: Color> Image<C> {
         Self::try_new(pixels, width, height).unwrap()
     }
 
+    /// Pixels are arranged left to right, then top to bottom.
     pub fn try_new(pixels: Vec<C>, width: usize, height: usize) -> Result<Self, ImageCreateError> {
         if width * height != pixels.len() {
             Err(ImageCreateError::DimensionMismatch {
@@ -44,16 +43,10 @@ impl<C: Color> Image<C> {
         }
     }
 
-    pub fn pixels(&self) -> ChunksExact<C> {
-        self.pixels.chunks_exact(self.width)
-    }
-
-    pub fn pixels_mut(&mut self) -> ChunksExactMut<C> {
-        self.pixels.chunks_exact_mut(self.width)
-    }
-
-    pub fn pixels_vec(self) -> Vec<C> {
+    pub fn iter_pixels(&self) -> impl Iterator<Item = impl Iterator<Item = C::ViewAs> + '_> + '_ {
         self.pixels
+            .chunks_exact(self.width)
+            .map(|row| row.iter().map(C::view))
     }
 
     pub fn width(&self) -> usize {
@@ -64,8 +57,14 @@ impl<C: Color> Image<C> {
         self.height
     }
 
-    fn pixel_count(&self) -> usize {
-        self.width * self.height
+    pub(crate) fn rows(&self) -> ChunksExact<C> {
+        self.pixels.chunks_exact(self.width)
+    }
+}
+
+impl<C: Color<ViewAs = C>> Image<C> {
+    pub fn into_pixels(Self { pixels, .. }: Self) -> Vec<C::ViewAs> {
+        pixels
     }
 }
 

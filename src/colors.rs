@@ -2,22 +2,44 @@ use std::iter::repeat;
 
 use crate::{types::Short, Image};
 
-pub trait Color {}
+pub trait Color: private::Sealed {
+    type ViewAs: Color;
+
+    fn view(&self) -> Self::ViewAs;
+}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Bilevel {
     Black,
     White,
 }
-impl Color for Bilevel {}
+impl Color for Bilevel {
+    type ViewAs = Self;
+
+    fn view(&self) -> Self::ViewAs {
+        *self
+    }
+}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Grayscale8Bit(pub u8);
-impl Color for Grayscale8Bit {}
+impl Color for Grayscale8Bit {
+    type ViewAs = Self;
+
+    fn view(&self) -> Self::ViewAs {
+        *self
+    }
+}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Grayscale4Bit(u8);
-impl Color for Grayscale4Bit {}
+impl Color for Grayscale4Bit {
+    type ViewAs = Self;
+
+    fn view(&self) -> Self::ViewAs {
+        *self
+    }
+}
 impl Grayscale4Bit {
     pub fn new(pixel: u8) -> Self {
         if pixel > 0b1111 {
@@ -45,7 +67,13 @@ pub struct RGB {
     pub g: u8,
     pub b: u8,
 }
-impl Color for RGB {}
+impl Color for RGB {
+    type ViewAs = Self;
+
+    fn view(&self) -> Self::ViewAs {
+        *self
+    }
+}
 impl RGB {
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
@@ -162,7 +190,13 @@ pub struct PaletteColor<'a> {
     map: &'a ColorMap,
     inx: u8,
 }
-impl<'a> Color for PaletteColor<'a> {}
+impl<'a> Color for PaletteColor<'a> {
+    type ViewAs = RGB;
+
+    fn view(&self) -> Self::ViewAs {
+        *self.map.to_rgb.get(self.inx as usize).unwrap()
+    }
+}
 impl<'a> PaletteColor<'a> {
     fn new(map: &'a ColorMap, inx: u8) -> Self {
         Self { map, inx }
@@ -175,4 +209,16 @@ impl<'a> PaletteColor<'a> {
     pub(crate) fn bits_per_palette_sample(&self) -> Short {
         self.map.bits_per_palette_sample()
     }
+}
+
+mod private {
+    use super::{Bilevel, Grayscale4Bit, Grayscale8Bit, PaletteColor, RGB};
+
+    pub trait Sealed {}
+
+    impl Sealed for Bilevel {}
+    impl Sealed for Grayscale8Bit {}
+    impl Sealed for Grayscale4Bit {}
+    impl Sealed for RGB {}
+    impl<'a> Sealed for PaletteColor<'a> {}
 }

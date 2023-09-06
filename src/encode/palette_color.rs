@@ -56,7 +56,7 @@ where
             image_strip_bytecounts,
         } = encode_palettized_img(
             wrt,
-            self.image.pixels(),
+            self.image.rows(),
             &self.image_compressor,
             self.image.bits_per_palette_sample() as u8,
         );
@@ -132,7 +132,7 @@ where
 
 fn encode_palettized_img<'a, C, E>(
     wrt: &mut TiffEncodeBuffer<E>,
-    pixels: ChunksExact<'_, colors::PaletteColor>,
+    rows: ChunksExact<'_, colors::PaletteColor>,
     image_compressor: &C,
     bits_per_sample: u8,
 ) -> EncodeResult
@@ -143,13 +143,12 @@ where
     let row_inx = wrt.align_and_get_len();
 
     if bits_per_sample == 8 {
-        image_compressor.encode(wrt, pixels.flatten().map(colors::PaletteColor::get_inx));
+        image_compressor.encode(wrt, rows.flatten().map(colors::PaletteColor::get_inx));
     } else {
         // 4 bits per sample
         image_compressor.encode(
             wrt,
-            pixels
-                .flat_map(|row| HalfBytePacker::new(row.iter().map(colors::PaletteColor::get_inx))),
+            rows.flat_map(|row| HalfBytePacker::new(row.iter().map(colors::PaletteColor::get_inx))),
         );
     }
 
