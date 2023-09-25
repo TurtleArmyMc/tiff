@@ -36,7 +36,7 @@ impl Entry {
 
 /// Represents the id representing each ifd field type.
 #[repr(u16)]
-#[derive(Clone, Copy)]
+#[derive(strum::FromRepr, Clone, Copy)]
 pub(crate) enum Type {
     /// 8-bit unsigned integer.
     Byte = 1,
@@ -69,7 +69,7 @@ pub(crate) enum Values {
 }
 
 #[repr(u16)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(strum::FromRepr, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Tag {
     NewSubFileType = 254,
     ImageWidth = 256,

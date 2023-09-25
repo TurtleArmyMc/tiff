@@ -1,4 +1,5 @@
 /// [`super::ifd::IfdFieldTag::PhotometricInterpretation`]
+#[derive(strum::FromRepr)]
 #[repr(u16)]
 pub enum PhotometricInterpretation {
     WhiteIsZero = 0,
