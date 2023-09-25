@@ -68,6 +68,28 @@ pub(crate) enum Values {
     Rationals(Vec<URational>),
 }
 
+impl Values {
+    pub(crate) const fn field_type_tag(&self) -> Type {
+        match self {
+            Values::Bytes(_) => Type::Byte,
+            Values::ASCII(_) => Type::ASCII,
+            Values::Shorts(_) => Type::Short,
+            Values::Longs(_) => Type::Long,
+            Values::Rationals(_) => Type::Rational,
+        }
+    }
+
+    pub(crate) fn num_values(&self) -> Long {
+        match self {
+            Values::Bytes(bytes) => bytes.len().try_into().unwrap(),
+            Values::ASCII(_) => 1,
+            Values::Shorts(short) => short.len().try_into().unwrap(),
+            Values::Longs(long) => long.len().try_into().unwrap(),
+            Values::Rationals(rational) => rational.len().try_into().unwrap(),
+        }
+    }
+}
+
 #[repr(u16)]
 #[derive(strum::FromRepr, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Tag {

@@ -80,28 +80,6 @@ pub(crate) fn encode_ifds<E: EncodeEndianness, I: ExactSizeIterator<Item = ifd::
     }
 }
 
-impl ifd::Values {
-    pub(crate) const fn field_type_tag(&self) -> ifd::Type {
-        match self {
-            ifd::Values::Bytes(_) => ifd::Type::Byte,
-            ifd::Values::ASCII(_) => ifd::Type::ASCII,
-            ifd::Values::Shorts(_) => ifd::Type::Short,
-            ifd::Values::Longs(_) => ifd::Type::Long,
-            ifd::Values::Rationals(_) => ifd::Type::Rational,
-        }
-    }
-
-    pub(crate) fn num_values(&self) -> Long {
-        match self {
-            ifd::Values::Bytes(bytes) => bytes.len().try_into().unwrap(),
-            ifd::Values::ASCII(_) => 1,
-            ifd::Values::Shorts(short) => short.len().try_into().unwrap(),
-            ifd::Values::Longs(long) => long.len().try_into().unwrap(),
-            ifd::Values::Rationals(rational) => rational.len().try_into().unwrap(),
-        }
-    }
-}
-
 pub(crate) mod private {
     use crate::types::{Long, Short};
 
