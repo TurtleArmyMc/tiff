@@ -1,3 +1,4 @@
+pub mod compression;
 mod grayscale_4bit;
 mod grayscale_8bit;
 mod palette_color;

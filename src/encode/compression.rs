@@ -1,22 +1,10 @@
+pub use crate::compression::{Lzw, NoCompression, PackBits};
+
 use std::collections::HashMap;
 
-use crate::{colors, types::Byte};
+use crate::types::Byte;
 
 use super::{buffer::TiffEncodeBuffer, EncodeEndianness};
-
-pub trait Compression<C: colors::Color>: sealed::CompressionImpl {}
-
-#[derive(Clone, Copy)]
-pub struct NoCompression;
-impl<C: colors::Color> Compression<C> for NoCompression {}
-
-#[derive(Clone, Copy)]
-pub struct PackBits;
-impl<C: colors::Color> Compression<C> for PackBits {}
-
-#[derive(Clone, Copy)]
-pub struct Lzw;
-impl<C: colors::Color> Compression<C> for Lzw {}
 
 /// `If n is between 0 and 127 inclusive, copy the next n+1 bytes literally`
 ///
@@ -194,68 +182,6 @@ impl<I: Iterator<Item = bool>> Iterator for BitPacker<I> {
     }
 }
 
-mod sealed {
-    use crate::{
-        encode::{buffer::TiffEncodeBuffer, EncodeEndianness},
-        ifd,
-        types::Byte,
-    };
-
-    use super::{lzw, packbits, Lzw, NoCompression, PackBits};
-
-    pub trait CompressionImpl {
-        fn compression_type_tag(&self) -> ifd::tags::Compression;
-
-        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            iter: I,
-        );
-    }
-
-    impl CompressionImpl for NoCompression {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::NoCompression
-        }
-
-        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            iter: I,
-        ) {
-            wrt.extend_bytes(iter)
-        }
-    }
-
-    impl CompressionImpl for PackBits {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::PackBits
-        }
-
-        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            iter: I,
-        ) {
-            packbits(wrt, iter)
-        }
-    }
-
-    impl CompressionImpl for Lzw {
-        fn compression_type_tag(&self) -> ifd::tags::Compression {
-            ifd::tags::Compression::Lzw
-        }
-
-        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
-            &self,
-            wrt: &mut TiffEncodeBuffer<E>,
-            iter: I,
-        ) {
-            lzw(wrt, iter)
-        }
-    }
-}
-
 /// Writes bytes using LZW compression.
 pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
     wrt: &mut TiffEncodeBuffer<E>,
@@ -328,4 +254,52 @@ pub(crate) fn lzw<E: EncodeEndianness, I: Iterator<Item = Byte>>(
     append_code(&mut bits, END_OF_INFORMATION_CODE, bitcount);
 
     wrt.extend_bytes(BitPacker::new(bits.into_iter()));
+}
+
+pub(crate) mod sealed {
+    use crate::{
+        compression::{Lzw, NoCompression, PackBits},
+        encode::{buffer::TiffEncodeBuffer, EncodeEndianness},
+        types::Byte,
+    };
+
+    use super::{lzw, packbits};
+
+    pub trait CompressionImpl {
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        );
+    }
+
+    impl CompressionImpl for NoCompression {
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            wrt.extend_bytes(iter)
+        }
+    }
+
+    impl CompressionImpl for PackBits {
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            packbits(wrt, iter)
+        }
+    }
+
+    impl CompressionImpl for Lzw {
+        fn encode<I: Iterator<Item = Byte>, E: EncodeEndianness>(
+            &self,
+            wrt: &mut TiffEncodeBuffer<E>,
+            iter: I,
+        ) {
+            lzw(wrt, iter)
+        }
+    }
 }

@@ -3,6 +3,7 @@ use std::{error::Error, fmt::Display, slice::ChunksExact};
 use colors::Color;
 
 pub mod colors;
+mod compression;
 mod decode;
 pub mod encode;
 pub mod ifd;

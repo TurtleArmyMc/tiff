@@ -2,6 +2,7 @@ use std::{marker::PhantomData, slice::ChunksExact};
 
 use crate::{
     colors,
+    compression::Compression,
     encode::{encode_ifds, private::EncodeResult},
     ifd,
     types::{Short, URational},
@@ -10,7 +11,6 @@ use crate::{
 
 use super::{
     buffer::TiffEncodeBuffer,
-    compression::Compression,
     private::{IfdInfo, ImageEncoderImpl},
     EncodeEndianness, ImageEncoder,
 };

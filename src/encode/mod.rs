@@ -10,7 +10,7 @@ pub mod rgb;
 pub use bilevel::BilevelImageEncoder;
 pub use image_header::EncodeEndianness;
 
-use crate::{ifd, types::Long};
+use crate::ifd;
 
 use self::buffer::TiffEncodeBuffer;
 
