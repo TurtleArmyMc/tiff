@@ -1,5 +1,5 @@
 /// [`super::ifd::IfdFieldTag::PhotometricInterpretation`]
-#[derive(strum::FromRepr)]
+#[derive(strum::FromRepr, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum PhotometricInterpretation {
     WhiteIsZero = 0,
@@ -9,6 +9,7 @@ pub enum PhotometricInterpretation {
 }
 
 /// [`super::ifd::IfdFieldTag::Compression`]
+#[derive(strum::FromRepr, Clone, Copy)]
 #[repr(u16)]
 pub enum Compression {
     NoCompression = 1,
@@ -18,7 +19,14 @@ pub enum Compression {
     PackBits = 32773,
 }
 
+impl Default for Compression {
+    fn default() -> Self {
+        Self::NoCompression
+    }
+}
+
 /// [`super::ifd::IfdFieldTag::ResolutionUnit`]
+#[derive(strum::FromRepr, Clone, Copy)]
 #[repr(u16)]
 pub enum ResolutionUnit {
     /// No absolute unit of measurement

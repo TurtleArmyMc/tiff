@@ -34,6 +34,12 @@ impl Entry {
     }
 }
 
+impl Into<Values> for Entry {
+    fn into(self) -> Values {
+        self.values
+    }
+}
+
 /// Represents the id representing each ifd field type.
 #[repr(u16)]
 #[derive(strum::FromRepr, Clone, Copy)]
@@ -92,7 +98,7 @@ impl Values {
 
 #[repr(u16)]
 #[derive(strum::FromRepr, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Tag {
+pub enum Tag {
     NewSubFileType = 254,
     ImageWidth = 256,
     ImageLength = 257,
